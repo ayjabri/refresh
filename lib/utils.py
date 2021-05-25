@@ -39,21 +39,19 @@ def calc_loss_dqn(batch, net, tgt_net, gamma, device="cpu"):
     states, actions, rewards, dones, next_states = unpack_batch(batch)
 
     states_v = torch.tensor(states).to(device)
-    next_states_v = torch.tensor(next_states).to(device)
     actions_v = torch.tensor(actions).to(device)
     rewards_v = torch.tensor(rewards).to(device)
     done_mask = torch.BoolTensor(dones).to(device)
 
     state_action_values = net(states_v).gather(1, actions_v.unsqueeze(-1)).squeeze(-1)
     with torch.no_grad():
+        next_states_v = torch.tensor(next_states).to(device)
         next_state_values = tgt_net.target_model(next_states_v).max(1)[0]
         next_state_values[done_mask] = 0.0
-
-    expected_state_action_values = next_state_values.detach() * gamma + rewards_v
+        expected_state_action_values = next_state_values.detach() * gamma + rewards_v
     return nn.MSELoss()(state_action_values, expected_state_action_values)
 
   
-    
 
 def createEnvs(name,n,seed=124):
     """Create an OpenAI gym environments wrapped and seed set"""
@@ -66,13 +64,14 @@ def createEnvs(name,n,seed=124):
     return envs
         
 
-def createLightWrapEnv(name,n,seed=124):
+def createLightWrapEnv(name,n,frame_stack_count,seed=None):
     """Create OpenAI gym environments wrapped using light wrappers to improve speed"""    
     envs = []
     for _ in range(n):
         env = atari_wrappers.make_atari(name, skip_noop=True, skip_maxskip=True)
-        env = atari_wrappers.wrap_deepmind(env, pytorch_img=True, frame_stack=True, frame_stack_count=2, clip_rewards=False)
-        env.seed(seed)
+        env = atari_wrappers.wrap_deepmind(env, clip_rewards=False,pytorch_img=True, frame_stack=True, 
+                                           frame_stack_count=frame_stack_count)
+        if seed: env.seed(seed)
         envs.append(env)
     return envs
 
@@ -89,10 +88,13 @@ def writerDir(env, steps):
     return folder, sub_folder, log_dir
 
 
-def play(game_id, agent=None, device='cpu', wait=0.0):
-    env = atari_wrappers.make_atari(game_id, skip_noop=True, skip_maxskip=True)
-    env = atari_wrappers.wrap_deepmind(env, episode_life=False, pytorch_img=True,
-                                       frame_stack=True, frame_stack_count=2, clip_rewards=False)
+def play(game_id, agent=None, wait=0.0):
+    if not isinstance(game_id,gym.Env):
+        env = atari_wrappers.make_atari(game_id, skip_noop=True, skip_maxskip=True)
+        env = atari_wrappers.wrap_deepmind(env, episode_life=False, pytorch_img=True,
+                                           frame_stack=True, frame_stack_count=2, clip_rewards=False)
+    else:
+        env = game_id
     state = env.reset()
     rewards = 0
     while True:

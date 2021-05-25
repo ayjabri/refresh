@@ -28,9 +28,9 @@ if __name__=='__main__':
     args = parser.parse_args()
     
     device = 'cuda' if args.cuda else 'cpu'
-    device ='cuda'
+    
     params = data.params[args.game]
-    envs = utils.createLightWrapEnv(params.env, args.envs)
+    envs = utils.createLightWrapEnv(params.env, args.envs, 4)
     
     shape = envs[0].observation_space.shape
     actions = envs[0].action_space.n
