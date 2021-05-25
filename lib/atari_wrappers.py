@@ -322,7 +322,7 @@ class SkipEnv(gym.Wrapper):
 
 
 def make_atari(env_id, max_episode_steps=None,
-               skip_noop=False, skip_maxskip=False):
+               skip_noop=True, skip_maxskip=True):
     env = gym.make(env_id)
     assert 'NoFrameskip' in env.spec.id
     if not skip_noop:
@@ -352,7 +352,7 @@ class ImageToPyTorch(gym.ObservationWrapper):
 
 
 def wrap_deepmind(env, episode_life=True, clip_rewards=True,
-                  frame_stack=False, scale=False, pytorch_img=False,
+                  frame_stack=True, scale=True, pytorch_img=True,
                   frame_stack_count=4, skip_firereset=False):
     """Configure environment for DeepMind-style Atari.
     """

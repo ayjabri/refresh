@@ -111,3 +111,6 @@ def play(game_id, agent=None, wait=0.0):
             print('Finished playing with {} rewards'.format(rewards))
             break
     env.close()
+
+
+    

@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
         *********  Using Multipocessing ***********
 Solving Lunar Lander using Deep-Q Learning Method
@@ -21,12 +23,15 @@ Notes:
 * I didn't notice any improvement when increasing the number of mp processes. Seems like
 one is enough for LunarLander at least
 * Increaseing number of taken stesp improves time but the agent becomes a bit clumzy!
+
+@author: Ayman Jabri
 """
 import torch
 import torch.multiprocessing as mp
 
+
 import os
-# import gym
+import cpprb
 import ptan
 import argparse
 import numpy as np
@@ -34,6 +39,7 @@ from time import time
 from datetime import datetime, timedelta
 from lib import mp_utils, model, data, utils
 from collections import deque
+
 
 THREADS = 4
 
@@ -50,6 +56,59 @@ def play(env, agent):
             print(rewards)
             break
     env.close()
+
+def createEnv(env_id):
+    env = utils.atari_wrappers.make_atari(env_id, skip_maxskip=True, skip_noop=True)
+    return utils.atari_wrappers.wrap_deepmind(env)
+
+
+def preprocess(obs):
+    obs = np.expand_dims(obs,0)
+    return torch.FloatTensor(obs)
+
+
+def data_fun(params, agent, exp_queue, done_training, frames, episodes):
+    env = createEnv(params.env)
+    obs = env.reset()
+    while not done_training.is_set():
+        frames.value += 1
+        action = agent(obs)[0].item()
+        next_obs,rew,done,_=env.step(action)
+        if done:
+            episodes.value += 1
+            exp_queue.put({'rew':rew, 'done':done, 'obs':obs, 'next_obs':obs, 'act':action})
+            obs = env.reset()
+        else:
+            exp_queue.put({'rew':rew, 'done':done, 'obs':obs, 'next_obs':next_obs, 'act':action})
+            obs = next_obs
+    pass
+
+
+def calc_loss_dqn(batch,net,tgt_net,gamma,device,priority=False):
+    """Return batch loss and priority updates (priority must be True) """
+
+    if priority:
+        rewards,dones,states,last_states,actions,weights,indexes=batch.values()
+    else:
+        rewards,dones,states,last_states,actions=batch.values()
+
+    states_v = torch.FloatTensor(states).to(device)
+    rewards_v = torch.FloatTensor(rewards).squeeze(-1).to(device)
+
+    q_s_a = net(states_v)[range(len(actions)),actions.squeeze(-1)]
+    with torch.no_grad():
+        last_states_v = torch.FloatTensor(last_states).to(device)
+        best_next_q_v = tgt_net.target_model(last_states_v).max(dim=1)[0]
+        best_next_q_v[dones.squeeze(-1)] = 0.0
+        exp_q_s_a = rewards_v + gamma * best_next_q_v.detach()
+    if priority:
+        weights_v = torch.FloatTensor(weights).to(device)
+        l = (q_s_a - exp_q_s_a)**2
+        loss_v = l * weights_v
+        return loss_v.mean(), (loss_v + 1e-5).data.cpu().numpy(), indexes
+    return torch.nn.functional.mse_loss(q_s_a, exp_q_s_a)
+
+
 
 
 if __name__ == '__main__':
@@ -85,7 +144,17 @@ if __name__ == '__main__':
     tgt_net = ptan.agent.TargetNet(net)
     selector = ptan.actions.EpsilonGreedyActionSelector()
     agent = ptan.agent.DQNAgent(net, selector,device=device)
-    buffer = ptan.experience.ExperienceReplayBuffer(None, params.buffer_size)
+    # buffer = ptan.experience.ExperienceReplayBuffer(None, params.buffer_size)
+
+
+    env_dict = {'state':{'shape':shape,'dtype':np.uint8},
+                'action':{'dtype':np.int8},
+                'reward':{},
+                'last_state':{'shape':shape,'dtype':np.uint8},
+                'done':{'dtype':np.bool}
+                }
+
+    buffer = cpprb.ReplayBuffer(params.buffer_size, env_dict=env_dict)
 
     optimizer = torch.optim.Adam(net.parameters(), lr=params.lr)
     exp_queue = mp.Queue(8)
