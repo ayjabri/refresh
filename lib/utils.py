@@ -51,25 +51,25 @@ def calc_loss_dqn(batch, net, tgt_net, gamma, device="cpu"):
         expected_state_action_values = next_state_values.detach() * gamma + rewards_v
     return nn.MSELoss()(state_action_values, expected_state_action_values)
 
-  
 
-def createEnvs(name,n,seed=124):
+
+def createEnvs(params):
     """Create an OpenAI gym environments wrapped and seed set"""
     envs = []
-    for _ in range(n):
-        env = gym.make(name)
+    for _ in range(params.n_envs):
+        env = gym.make(params.env)
         env = ptan.common.wrappers.wrap_dqn(env)
-        env.seed(seed)
+        env.seed(params.seed)
         envs.append(env)
     return envs
-        
+
 
 def createLightWrapEnv(name,n,frame_stack_count,seed=None):
-    """Create OpenAI gym environments wrapped using light wrappers to improve speed"""    
+    """Create OpenAI gym environments wrapped using light wrappers to improve speed"""
     envs = []
     for _ in range(n):
         env = atari_wrappers.make_atari(name, skip_noop=True, skip_maxskip=True)
-        env = atari_wrappers.wrap_deepmind(env, clip_rewards=False,pytorch_img=True, frame_stack=True, 
+        env = atari_wrappers.wrap_deepmind(env, clip_rewards=False,pytorch_img=True, frame_stack=True,
                                            frame_stack_count=frame_stack_count)
         if seed: env.seed(seed)
         envs.append(env)
@@ -80,10 +80,10 @@ def createLightWrapEnv(name,n,frame_stack_count,seed=None):
 def writerDir(env, steps):
     folder = (env.game + '_' + "DQN").capitalize()
     sub_folder = datetime.now().strftime('%h_%d_%Y_%H_%M_')+str(steps)+'_steps'
-    
+
     if not os.path.exists(os.path.join(folder,sub_folder)):
         os.makedirs(os.path.join(folder, sub_folder))
-    
+
     log_dir = os.path.join('runs',sub_folder)
     return folder, sub_folder, log_dir
 
@@ -113,4 +113,3 @@ def play(game_id, agent=None, wait=0.0):
     env.close()
 
 
-    
