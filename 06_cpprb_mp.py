@@ -5,7 +5,7 @@ Created on Mon May 24 15:26:12 2021
 
 @author: ayman
 """
-#%% prerun
+# %% prerun
 # from multiprocessing import Process, Event, SimpleQueue
 
 import ptan
@@ -21,16 +21,18 @@ from cpprb import MPReplayBuffer, create_env_dict, ReplayBuffer
 from lib import model, utils, data
 
 
-Observation = namedtuple('Observation',['rew', 'done', 'obs', 'next_obs', 'act'])
+Observation = namedtuple(
+    'Observation', ['rew', 'done', 'obs', 'next_obs', 'act'])
 
 
 def createEnv(env_id):
-    env = utils.atari_wrappers.make_atari(env_id, skip_maxskip=True, skip_noop=True)
+    env = utils.atari_wrappers.make_atari(
+        env_id, skip_maxskip=True, skip_noop=True)
     return utils.atari_wrappers.wrap_deepmind(env)
 
 
 def preprocess(obs):
-    obs = np.expand_dims(obs,0)
+    obs = np.expand_dims(obs, 0)
     return torch.FloatTensor(obs)
 
 
@@ -40,30 +42,31 @@ def data_fun(params, agent, exp_queue, done_training, frames, episodes):
     while not done_training.is_set():
         frames.value += 1
         action = agent(obs)[0].item()
-        next_obs,rew,done,_=env.step(action)
+        next_obs, rew, done, _ = env.step(action)
         if done:
             episodes.value += 1
-            exp_queue.put({'rew':rew, 'done':done, 'obs':obs, 'next_obs':obs, 'act':action})
+            exp_queue.put({'rew': rew, 'done': done, 'obs': obs,
+                           'next_obs': obs, 'act': action})
             obs = env.reset()
         else:
-            exp_queue.put({'rew':rew, 'done':done, 'obs':obs, 'next_obs':next_obs, 'act':action})
+            exp_queue.put({'rew': rew, 'done': done, 'obs': obs,
+                           'next_obs': next_obs, 'act': action})
             obs = next_obs
     pass
 
 
-
-def calc_loss_dqn(batch,net,tgt_net,gamma,device,priority=False):
+def calc_loss_dqn(batch, net, tgt_net, gamma, device, priority=False):
     """Return batch loss and priority updates (priority must be True) """
 
     if priority:
-        rewards,dones,states,last_states,actions,weights,indexes=batch.values()
+        rewards, dones, states, last_states, actions, weights, indexes = batch.values()
     else:
-        rewards,dones,states,last_states,actions=batch.values()
+        rewards, dones, states, last_states, actions = batch.values()
 
     states_v = torch.FloatTensor(states).to(device)
     rewards_v = torch.FloatTensor(rewards).squeeze(-1).to(device)
 
-    q_s_a = net(states_v)[range(len(actions)),actions.squeeze(-1)]
+    q_s_a = net(states_v)[range(len(actions)), actions.squeeze(-1)]
     with torch.no_grad():
         last_states_v = torch.FloatTensor(last_states).to(device)
         best_next_q_v = tgt_net.target_model(last_states_v).max(dim=1)[0]
@@ -100,7 +103,7 @@ def calc_loss_dqn(batch,net,tgt_net,gamma,device,priority=False):
 #             for q in queues:
 #                 q.put(w)
 
-#%% run_cell
+# %% run_cell
 if __name__ == "__main__":
     ENV_ID = 'pong'
     THREADS = 4
@@ -120,21 +123,22 @@ if __name__ == "__main__":
     tgt_net = ptan.agent.TargetNet(net)
 
     selector = ptan.actions.ArgmaxActionSelector()
-    agent = ptan.agent.DQNAgent(net, selector, device= device, preprocessor=preprocess)
+    agent = ptan.agent.DQNAgent(
+        net, selector, device=device, preprocessor=preprocess)
 
-    optimizer = torch.optim.Adam(net.parameters(),lr=params.lr)
+    optimizer = torch.optim.Adam(net.parameters(), lr=params.lr)
 
     done_training = mp.Event()
     done_training.clear()
 
-    global_rb = ReplayBuffer(size=10_000,env_dict=env_dict)
+    global_rb = ReplayBuffer(size=10_000, env_dict=env_dict)
     exp_queue = mp.Queue(maxsize=1)
 
-    frames = mp.Value('i',0)
-    episodes = mp.Value('i',0)
+    frames = mp.Value('i', 0)
+    episodes = mp.Value('i', 0)
 
     procs = [mp.Process(target=data_fun,
-                   args=(params, agent, exp_queue, done_training, frames, episodes)) for _ in range(THREADS)]
+                        args=(params, agent, exp_queue, done_training, frames, episodes)) for _ in range(THREADS)]
 
     for p in procs:
         p.start()
@@ -149,7 +153,7 @@ if __name__ == "__main__":
             total_rewards.append(state['rew'])
             global_rb.add(**state)
             del state
-        if global_rb.get_stored_size()<params.init_replay:
+        if global_rb.get_stored_size() < params.init_replay:
             continue
         if (datetime.now()-start).seconds > 3:
             mean = np.mean(total_rewards[-100:])
@@ -174,7 +178,3 @@ if __name__ == "__main__":
     for p in procs:
         p.terminate()
         p.join()
-
-
-
-

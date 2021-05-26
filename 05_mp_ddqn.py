@@ -37,6 +37,7 @@ from collections import deque
 
 THREADS = 4
 
+
 @torch.no_grad()
 def play(env, agent):
     state = env.reset()
@@ -55,7 +56,7 @@ def play(env, agent):
 if __name__ == '__main__':
     mp.set_start_method('spawn')
     os.environ['OMP_NUM_THREADS'] = str(THREADS)
-    os.environ['MKL_THREADING_LAYER']='GNU'
+    os.environ['MKL_THREADING_LAYER'] = 'GNU'
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--play', action='store_true', default=False,
@@ -70,12 +71,12 @@ if __name__ == '__main__':
 
     device = 'cuda' if (args.cuda and torch.cuda.is_available()) else 'cpu'
 
-    frames = mp.Value('i',0)
-    episodes = mp.Value('i',0)
+    frames = mp.Value('i', 0)
+    episodes = mp.Value('i', 0)
 
     params = data.params[args.env]
 
-    env = utils.createLightWrapEnv(params.env, 1,4)[0]
+    env = utils.createLightWrapEnv(params.env, 1, 4)[0]
     shape = env.observation_space.shape
     actions = env.action_space.n
 
@@ -84,14 +85,15 @@ if __name__ == '__main__':
     print(net)
     tgt_net = ptan.agent.TargetNet(net)
     selector = ptan.actions.EpsilonGreedyActionSelector()
-    agent = ptan.agent.DQNAgent(net, selector,device=device)
+    agent = ptan.agent.DQNAgent(net, selector, device=device)
     buffer = ptan.experience.ExperienceReplayBuffer(None, params.buffer_size)
 
     optimizer = torch.optim.Adam(net.parameters(), lr=params.lr)
     exp_queue = mp.Queue(8)
     proc_list = []
     for n in range(THREADS):
-        proc = mp.Process(target=mp_utils.data_fun_global, name=str(n), args=(net, exp_queue, params, frames, episodes, device))
+        proc = mp.Process(target=mp_utils.data_fun_global, name=str(
+            n), args=(net, exp_queue, params, frames, episodes, device))
         proc.start()
         proc_list.append(proc)
 
@@ -128,7 +130,7 @@ if __name__ == '__main__':
 
         optimizer.zero_grad()
         loss = utils.calc_loss_dqn(
-            batch, net, tgt_net, params.gamma**params.steps,device=device)
+            batch, net, tgt_net, params.gamma**params.steps, device=device)
         loss.backward()
         optimizer.step()
         # epoch += 1
@@ -142,4 +144,3 @@ if __name__ == '__main__':
     for p in proc_list:
         p.kill()
         p.join()
-

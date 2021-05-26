@@ -67,16 +67,14 @@ def data_fun(net, exp_queue, params, device='cpu'):
         exp_queue.put(exp)
 
 
-
-
 def data_fun_global(net, exp_queue, params, frames, episodes, device='cpu'):
-    envs = utils.createLightWrapEnv(params.env,1, 4, 124)
+    envs = utils.createLightWrapEnv(params.env, 1, 4, 124)
     selector = ptan.actions.EpsilonGreedyActionSelector()
     agent = ptan.agent.DQNAgent(net, selector, device=device)
     eps_tracker = ptan.actions.EpsilonTracker(selector, params.eps_start, params.eps_final,
                                               params.eps_frames)
     exp_source = ptan.experience.ExperienceSourceFirstLast(envs, agent,
-                                                       params.gamma, steps_count=params.steps)
+                                                           params.gamma, steps_count=params.steps)
     for exp in exp_source:
         frames.value += 1
         step = frames.value
@@ -86,8 +84,6 @@ def data_fun_global(net, exp_queue, params, frames, episodes, device='cpu'):
             episodes.value += 1
             exp_queue.put(EpisodeEnd(step, new_reward[0], selector.epsilon))
         exp_queue.put(exp)
-        
-        
 
 
 class MPBatchGenerator(object):
@@ -135,7 +131,7 @@ class MPBatchGenerator(object):
     def __iter__(self):
         while True:
             while not self.exp_queue.empty():
-                exp = self.exp_queue.get()                
+                exp = self.exp_queue.get()
                 if isinstance(exp, EpisodeEnd):
                     self._total_rewards.append(exp.reward)
                     self.frame += exp.step

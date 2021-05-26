@@ -43,6 +43,7 @@ from collections import deque
 
 THREADS = 4
 
+
 @torch.no_grad()
 def play(env, agent):
     state = env.reset()
@@ -57,13 +58,15 @@ def play(env, agent):
             break
     env.close()
 
+
 def createEnv(env_id):
-    env = utils.atari_wrappers.make_atari(env_id, skip_maxskip=True, skip_noop=True)
+    env = utils.atari_wrappers.make_atari(
+        env_id, skip_maxskip=True, skip_noop=True)
     return utils.atari_wrappers.wrap_deepmind(env)
 
 
 def preprocess(obs):
-    obs = np.expand_dims(obs,0)
+    obs = np.expand_dims(obs, 0)
     return torch.FloatTensor(obs)
 
 
@@ -73,29 +76,31 @@ def data_fun(params, agent, exp_queue, done_training, frames, episodes):
     while not done_training.is_set():
         frames.value += 1
         action = agent(obs)[0].item()
-        next_obs,rew,done,_=env.step(action)
+        next_obs, rew, done, _ = env.step(action)
         if done:
             episodes.value += 1
-            exp_queue.put({'rew':rew, 'done':done, 'obs':obs, 'next_obs':obs, 'act':action})
+            exp_queue.put({'rew': rew, 'done': done, 'obs': obs,
+                           'next_obs': obs, 'act': action})
             obs = env.reset()
         else:
-            exp_queue.put({'rew':rew, 'done':done, 'obs':obs, 'next_obs':next_obs, 'act':action})
+            exp_queue.put({'rew': rew, 'done': done, 'obs': obs,
+                           'next_obs': next_obs, 'act': action})
             obs = next_obs
     pass
 
 
-def calc_loss_dqn(batch,net,tgt_net,gamma,device,priority=False):
+def calc_loss_dqn(batch, net, tgt_net, gamma, device, priority=False):
     """Return batch loss and priority updates (priority must be True) """
 
     if priority:
-        rewards,dones,states,last_states,actions,weights,indexes=batch.values()
+        rewards, dones, states, last_states, actions, weights, indexes = batch.values()
     else:
-        rewards,dones,states,last_states,actions=batch.values()
+        rewards, dones, states, last_states, actions = batch.values()
 
     states_v = torch.FloatTensor(states).to(device)
     rewards_v = torch.FloatTensor(rewards).squeeze(-1).to(device)
 
-    q_s_a = net(states_v)[range(len(actions)),actions.squeeze(-1)]
+    q_s_a = net(states_v)[range(len(actions)), actions.squeeze(-1)]
     with torch.no_grad():
         last_states_v = torch.FloatTensor(last_states).to(device)
         best_next_q_v = tgt_net.target_model(last_states_v).max(dim=1)[0]
@@ -109,12 +114,10 @@ def calc_loss_dqn(batch,net,tgt_net,gamma,device,priority=False):
     return torch.nn.functional.mse_loss(q_s_a, exp_q_s_a)
 
 
-
-
 if __name__ == '__main__':
     mp.set_start_method('spawn')
     os.environ['OMP_NUM_THREADS'] = str(THREADS)
-    os.environ['MKL_THREADING_LAYER']='GNU'
+    os.environ['MKL_THREADING_LAYER'] = 'GNU'
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--play', action='store_true', default=False,
@@ -129,12 +132,12 @@ if __name__ == '__main__':
 
     device = 'cuda' if (args.cuda and torch.cuda.is_available()) else 'cpu'
 
-    frames = mp.Value('i',0)
-    episodes = mp.Value('i',0)
+    frames = mp.Value('i', 0)
+    episodes = mp.Value('i', 0)
 
     params = data.params[args.env]
 
-    env = utils.createLightWrapEnv(params.env, 1,4)[0]
+    env = utils.createLightWrapEnv(params.env, 1, 4)[0]
     shape = env.observation_space.shape
     actions = env.action_space.n
 
@@ -143,15 +146,14 @@ if __name__ == '__main__':
     print(net)
     tgt_net = ptan.agent.TargetNet(net)
     selector = ptan.actions.EpsilonGreedyActionSelector()
-    agent = ptan.agent.DQNAgent(net, selector,device=device)
+    agent = ptan.agent.DQNAgent(net, selector, device=device)
     # buffer = ptan.experience.ExperienceReplayBuffer(None, params.buffer_size)
 
-
-    env_dict = {'state':{'shape':shape,'dtype':np.uint8},
-                'action':{'dtype':np.int8},
-                'reward':{},
-                'last_state':{'shape':shape,'dtype':np.uint8},
-                'done':{'dtype':np.bool}
+    env_dict = {'state': {'shape': shape, 'dtype': np.uint8},
+                'action': {'dtype': np.int8},
+                'reward': {},
+                'last_state': {'shape': shape, 'dtype': np.uint8},
+                'done': {'dtype': np.bool}
                 }
 
     buffer = cpprb.ReplayBuffer(params.buffer_size, env_dict=env_dict)
@@ -160,7 +162,8 @@ if __name__ == '__main__':
     exp_queue = mp.Queue(8)
     proc_list = []
     for n in range(THREADS):
-        proc = mp.Process(target=mp_utils.data_fun_global, name=str(n), args=(net, exp_queue, params, frames, episodes, device))
+        proc = mp.Process(target=mp_utils.data_fun_global, name=str(
+            n), args=(net, exp_queue, params, frames, episodes, device))
         proc.start()
         proc_list.append(proc)
 
@@ -197,7 +200,7 @@ if __name__ == '__main__':
 
         optimizer.zero_grad()
         loss = utils.calc_loss_dqn(
-            batch, net, tgt_net, params.gamma**params.steps,device=device)
+            batch, net, tgt_net, params.gamma**params.steps, device=device)
         loss.backward()
         optimizer.step()
         # epoch += 1
@@ -211,4 +214,3 @@ if __name__ == '__main__':
     for p in proc_list:
         p.kill()
         p.join()
-
