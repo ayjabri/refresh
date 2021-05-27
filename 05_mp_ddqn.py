@@ -76,7 +76,7 @@ if __name__ == '__main__':
 
     params = data.params[args.env]
 
-    env = utils.createLightWrapEnv(params.env, 1, 4)[0]
+    env = utils.createEnvs(params)[0]
     shape = env.observation_space.shape
     actions = env.action_space.n
 
@@ -89,7 +89,7 @@ if __name__ == '__main__':
     buffer = ptan.experience.ExperienceReplayBuffer(None, params.buffer_size)
 
     optimizer = torch.optim.Adam(net.parameters(), lr=params.lr)
-    exp_queue = mp.Queue(8)
+    exp_queue = mp.Queue(THREADS)
     proc_list = []
     for n in range(THREADS):
         proc = mp.Process(target=mp_utils.data_fun_global, name=str(

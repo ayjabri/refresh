@@ -22,15 +22,18 @@ if __name__ == '__main__':
                         help='OpenAI gym environment name.\n Default: pong')
     parser.add_argument('--cuda', action='store_true',
                         help='Activate GPU in training')
-    parser.add_argument('--steps', default=1, type=int,
+    parser.add_argument('--steps', type=int,
                         help='Number of training steps to skip')
+    parser.add_argument('--simple', action='store_true', help='Use simple wrapper to enhance convergence speed')
     args = parser.parse_args()
 
     params = data.params[args.env]
+    if args.steps is not None: params.steps = args.steps
+
     torch.manual_seed(params.seed)
     device = 'cuda' if (args.cuda and torch.cuda.is_available()) else 'cpu'
 
-    envs = utils.createLightWrapEnv(params.env, n=4, seed=params.seed)
+    envs = utils.createEnvs(params)
 
     shape = envs[0].observation_space.shape
     actions = envs[0].action_space.n
@@ -44,7 +47,7 @@ if __name__ == '__main__':
 
     agent = ptan.agent.DQNAgent(net, selector, device=device)
     exp_src = ptan.experience.ExperienceSourceFirstLast(
-        envs, agent, params.gamma, steps_count=args.steps)
+        envs, agent, params.gamma, steps_count=params.steps)
 
     buffer = ptan.experience.ExperienceReplayBuffer(
         exp_src, params.buffer_size)
@@ -74,7 +77,7 @@ if __name__ == '__main__':
 
     with ptan.common.utils.RewardTracker(writer) as tracker:
         while True:
-            frame += 1
+            frame += params.n_envs
             eps_tracker.frame(frame)
             buffer.populate(params.n_envs)
             reward = exp_src.pop_total_rewards()
@@ -100,7 +103,7 @@ if __name__ == '__main__':
             optimizer.zero_grad()
             batch = buffer.sample(params.batch_size * params.n_envs)
             loss_v = utils.calc_loss_dqn(
-                batch, net, tgt_net, params.gamma**args.steps, device)
+                batch, net, tgt_net, params.gamma**params.steps, device)
             loss_v.backward()
             optimizer.step()
 
@@ -108,6 +111,6 @@ if __name__ == '__main__':
                 lr_scheduler.step(int(best_reward))
                 writer.add_scalar(
                     'LearningRate', scalar_value=lr_scheduler._last_lr, global_step=frame)
-            # del batch, loss_v
+            del batch, loss_v
             if frame % 1000 == 0:
                 tgt_net.sync()

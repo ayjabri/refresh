@@ -58,7 +58,7 @@ if __name__ == '__main__':
 
     params = data.params[args.game]
 
-    envs = utils.createLightWrapEnv(params.env, args.envs, 4)
+    envs = utils.createEnvs(params)
 
     shape = envs[0].observation_space.shape
     actions = envs[0].action_space.n

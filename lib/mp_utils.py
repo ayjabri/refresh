@@ -50,7 +50,7 @@ def data_fun(net, exp_queue, params, device='cpu'):
 
         5- Populate N steps if using Buffer       
     """
-    envs = utils.createLightWrapEnv(params.env, params.n_envs, 4, 124)
+    envs = utils.createEnvs(params)
     selector = ptan.actions.EpsilonGreedyActionSelector()
     agent = ptan.agent.DQNAgent(net, selector, device=device)
     eps_tracker = ptan.actions.EpsilonTracker(selector, params.eps_start, params.eps_final,
@@ -68,7 +68,7 @@ def data_fun(net, exp_queue, params, device='cpu'):
 
 
 def data_fun_global(net, exp_queue, params, frames, episodes, device='cpu'):
-    envs = utils.createLightWrapEnv(params.env, 1, 4, 124)
+    envs = utils.createEnvs(params)
     selector = ptan.actions.EpsilonGreedyActionSelector()
     agent = ptan.agent.DQNAgent(net, selector, device=device)
     eps_tracker = ptan.actions.EpsilonTracker(selector, params.eps_start, params.eps_final,

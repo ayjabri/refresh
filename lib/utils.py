@@ -28,8 +28,9 @@ def unpack_batch(batch):
             last_states.append(state)       # the result will be masked anyway
         else:
             last_states.append(np.array(exp.last_state, copy=False))
+            
     return np.array(states, copy=False), np.array(actions), np.array(rewards, dtype=np.float32), \
-        np.array(dones, dtype=np.uint8), np.array(last_states, copy=False)
+        np.array(dones), np.array(last_states, copy=False)
 
 
 def calc_loss_dqn(batch, net, tgt_net, gamma, device="cpu"):
@@ -38,7 +39,7 @@ def calc_loss_dqn(batch, net, tgt_net, gamma, device="cpu"):
     states_v = torch.tensor(states).to(device)
     actions_v = torch.tensor(actions).to(device)
     rewards_v = torch.tensor(rewards).to(device)
-    done_mask = torch.BoolTensor(dones).to(device)
+    done_mask = torch.tensor(dones).to(device)
 
     state_action_values = net(states_v).gather(
         1, actions_v.unsqueeze(-1)).squeeze(-1)
@@ -61,16 +62,16 @@ def createEnvs(params):
     return envs
 
 
-def createLightWrapEnv(name, n, frame_stack_count, seed=None):
+def createLightWrapEnv(params):
     """Create OpenAI gym environments wrapped using light wrappers to improve speed"""
     envs = []
-    for _ in range(n):
+    for _ in range(params.n_envs):
         env = atari_wrappers.make_atari(
-            name, skip_noop=True, skip_maxskip=True)
+            params.env, skip_noop=True, skip_maxskip=True)
         env = atari_wrappers.wrap_deepmind(env, clip_rewards=False, pytorch_img=True, frame_stack=True,
-                                           frame_stack_count=frame_stack_count)
-        if seed:
-            env.seed(seed)
+                                           frame_stack_count=params.frame_stack)
+        if params.seed:
+            env.seed(params.seed)
         envs.append(env)
     return envs
 
