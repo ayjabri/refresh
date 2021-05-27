@@ -72,9 +72,9 @@ if __name__ == '__main__':
 
     with ptan.common.utils.RewardTracker(writer) as tracker:
         while True:
-            frame += 1
+            frame += params.n_envs
             eps_tracker.frame(frame)
-            buffer.populate()
+            buffer.populate(params.n_envs)
             reward = exp_src.pop_total_rewards()
             if reward:
                 episode += 1
