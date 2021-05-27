@@ -20,7 +20,7 @@ Notes:
 ------
 * I didn't notice any improvement when increasing the number of mp processes. Seems like
 one is enough for LunarLander at least
-* Increaseing number of taken stesp improves time but the agent becomes a bit clumzy!
+* On the other hand increaseing the number of steps improves time but the agent becomes a bit clumzy!
 """
 import torch
 import torch.multiprocessing as mp

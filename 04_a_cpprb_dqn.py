@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-@author: ayman
+@author: Ayman Jabri
+
 """
 import os
 import ptan
@@ -14,6 +15,10 @@ from cpprb import ReplayBuffer, PrioritizedReplayBuffer
 from lib import data, utils, model
 from torch.utils.tensorboard import SummaryWriter
 
+
+END_BETA_FRAME = 500_000
+BETA = 0.4
+TGT_BETA = 1.0
 
 def calc_loss_dqn(batch, net, tgt_net, gamma, device, priority=False):
     """Return batch loss and priority updates (priority must be True) """
@@ -52,6 +57,9 @@ if __name__ == '__main__':
                         help='Number of environments to run simultaneously')
     parser.add_argument('-g', '--game', default='invaders',
                         help='OpenAI gym environment name')
+    parser.add_argument('--play', action='store_true',
+                        help='Play a game when the environment is solved')
+
     args = parser.parse_args()
 
     device = 'cuda' if args.cuda else 'cpu'
@@ -81,7 +89,8 @@ if __name__ == '__main__':
                 'done': {'dtype': np.bool}
                 }
 
-    beta = 0.4
+    step = (TGT_BETA - BETA)/END_BETA_FRAME
+
     buffer = PrioritizedReplayBuffer(params.buffer_size, env_dict) if args.priority else \
         ReplayBuffer(params.buffer_size, env_dict=env_dict)
 
@@ -128,8 +137,12 @@ if __name__ == '__main__':
                 continue
 
             if frame % args.envs == 0:
-                batch = buffer.sample(params.batch_size, beta)
-                # beta += (1-beta)/frame
+                if args.priority:
+                    batch = buffer.sample(params.batch_size, BETA)
+                    BETA = min(BETA + frame * step, TGT_BETA)
+                else:
+                    batch = buffer.sample(params.batch_size)
+
                 optimizer.zero_grad()
                 if args.priority:
                     loss_v, batch_prios, batch_indexes = calc_loss_dqn(batch, net,

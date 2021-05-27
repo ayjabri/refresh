@@ -33,7 +33,7 @@ if __name__ == '__main__':
     torch.manual_seed(params.seed)
     device = 'cuda' if (args.cuda and torch.cuda.is_available()) else 'cpu'
 
-    envs = utils.createEnvs(params)
+    envs = utils.createEnvs(params,stack_frames=2)
 
     shape = envs[0].observation_space.shape
     actions = envs[0].action_space.n

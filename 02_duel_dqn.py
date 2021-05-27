@@ -10,29 +10,10 @@ import ptan
 import torch
 import argparse
 from tensorboardX import SummaryWriter
-from lib import utils, model, data, atari_wrappers
+from lib import utils, model, data
 from datetime import datetime
 
 ALGORITHM = 'DDQN'
-
-
-### Do NOT use this wrapper ###
-def createLightWrapEnv(params):
-    """
-    Something is wrong with this wrapper! it causes the sytsem to eat up all 
-    the available memory! I need to troubleshoot it when I have time
-    """
-    envs = []
-    for _ in range(params.n_envs):
-        env = atari_wrappers.make_atari(
-            params.env, skip_noop=False, skip_maxskip=False)
-        env = atari_wrappers.wrap_deepmind(env, clip_rewards=True, pytorch_img=True, frame_stack=True,
-                                           frame_stack_count=params.frame_stack)
-        if params.seed:
-            env.seed(params.seed)
-        envs.append(env)
-    return envs
-
 
 
 if __name__ == '__main__':
@@ -41,15 +22,15 @@ if __name__ == '__main__':
                         help='OpenAI gym environment name.\n Default: pong')
     parser.add_argument('--cuda', action='store_true',
                         help='Activate GPU in training')
-    parser.add_argument('--simple', action='store_true',
-                        help='DO NOT SELECT THIS.. Use simple wrapper to enhance convergence speed')
+    parser.add_argument('--stack', default=4, type=int,
+                        help='stack N frames in each observation: this will change the input of the nn')
     args = parser.parse_args()
 
     params = data.params[args.env]
     torch.manual_seed(params.seed)
     device = 'cuda' if (args.cuda and torch.cuda.is_available()) else 'cpu'
 
-    envs = createLightWrapEnv(params) if args.simple else utils.createEnvs(params)
+    envs = utils.createEnvs(params, stack_frames=args.stack)
 
     shape = envs[0].observation_space.shape
     actions = envs[0].action_space.n
@@ -76,8 +57,8 @@ if __name__ == '__main__':
         os.makedirs(os.path.join(folder, sub_folder))
 
     log_dir = os.path.join('runs', sub_folder)
-    wrapper = 'simple_wrapper' if args.simple else 'normal_wrapper'
-    writer = SummaryWriter(logdir=log_dir, comment=wrapper)
+    
+    writer = SummaryWriter(logdir=log_dir, comment=f'stack_{args.stack}')
 
     optimizer = torch.optim.Adam(net.parameters(), lr=params.lr)
     lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', patience=10_000, verbose=True,
