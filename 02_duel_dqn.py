@@ -106,6 +106,7 @@ if __name__ == '__main__':
                 lr_scheduler.step(int(best_reward))
                 writer.add_scalar(
                     'LearningRate', scalar_value=lr_scheduler._last_lr, global_step=frame)
+                    
             del batch, loss_v
             if frame % 1000 == 0:
                 tgt_net.sync()
