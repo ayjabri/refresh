@@ -57,7 +57,7 @@ if __name__ == '__main__':
         os.makedirs(os.path.join(folder, sub_folder))
 
     log_dir = os.path.join('runs', sub_folder)
-    
+
     writer = SummaryWriter(logdir=log_dir, comment=f'stack_{args.stack}')
 
     optimizer = torch.optim.Adam(net.parameters(), lr=params.lr)
@@ -98,7 +98,7 @@ if __name__ == '__main__':
                 continue
 
             optimizer.zero_grad()
-            batch = buffer.sample(params.batch_size)
+            batch = buffer.sample(params.batch_size * params.n_envs)
             loss_v = utils.calc_loss_dqn(
                 batch, net, tgt_net, params.gamma**params.steps, device)
             loss_v.backward()

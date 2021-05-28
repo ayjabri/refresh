@@ -6,14 +6,16 @@ Created on Thu May 20 14:12:09 2021
 @author: ayman
 """
 import os
+import sys
+import gym
 import ptan
 import torch
 import argparse
 from tensorboardX import SummaryWriter
-from lib import utils, model, data
+from lib import utils, model, data, atari_wrappers
 from datetime import datetime
 
-ALGORITHM = 'DDQN'
+ALGORITHM = 'DDQN_WRAP'
 
 
 if __name__ == '__main__':
@@ -22,21 +24,25 @@ if __name__ == '__main__':
                         help='OpenAI gym environment name.\n Default: pong')
     parser.add_argument('--cuda', action='store_true',
                         help='Activate GPU in training')
-    parser.add_argument('--steps', type=int,
-                        help='Number of training steps to skip')
-    parser.add_argument('--simple', action='store_true', help='Use simple wrapper to enhance convergence speed')
+    parser.add_argument('--wrap', action='store_true',
+                        help='Use simple wrapper to enhance convergence speed')
     args = parser.parse_args()
 
+    if not args.wrap:
+        sys.exit("Invalid selection. You must add --wrap flag to run this script")
+
     params = data.params[args.env]
-    if args.steps is not None: params.steps = args.steps
 
     torch.manual_seed(params.seed)
     device = 'cuda' if (args.cuda and torch.cuda.is_available()) else 'cpu'
 
-    envs = utils.createEnvs(params,stack_frames=2)
+    # We're using light wrappers that stacks 2 frames and using PIL-smid library
+    # Accordign to MaxLapan this should improve both fps and convergance
+    env_ = gym.make(params.env)
+    env = atari_wrappers.wrap_dqn_light(env_)
 
-    shape = envs[0].observation_space.shape
-    actions = envs[0].action_space.n
+    shape = env.observation_space.shape
+    actions = env.action_space.n
 
     net = model.DDQN(shape, actions).to(device)
     tgt_net = ptan.agent.TargetNet(net)
@@ -47,12 +53,12 @@ if __name__ == '__main__':
 
     agent = ptan.agent.DQNAgent(net, selector, device=device)
     exp_src = ptan.experience.ExperienceSourceFirstLast(
-        envs, agent, params.gamma, steps_count=params.steps)
+        env, agent, params.gamma, steps_count=1)
 
     buffer = ptan.experience.ExperienceReplayBuffer(
         exp_src, params.buffer_size)
 
-    folder = (envs[0].game + '_' + ALGORITHM).capitalize()
+    folder = (env.game + '_' + ALGORITHM).capitalize()
     sub_folder = datetime.now().strftime('%h_%d_%Y_%H_%M_')+str(args.steps)+'_steps'
 
     if not os.path.exists(os.path.join(folder, sub_folder)):
@@ -62,11 +68,12 @@ if __name__ == '__main__':
     writer = SummaryWriter(logdir=log_dir)
 
     optimizer = torch.optim.Adam(net.parameters(), lr=params.lr)
-    lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', patience=10_000, verbose=True,
+    lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
+                                                              mode='max', patience=10_000, verbose=True,
                                                               factor=0.75, min_lr=1e-6, cooldown=10_000)
     print(net)
     print('*'*10, ' Start Training ',
-          envs[0].game, ' {} '.format(device), '*'*10)
+          env.game, ' {} '.format(device), '*'*10)
 
     best_reward = -float('inf')
     frame = params.init_replay
@@ -77,9 +84,9 @@ if __name__ == '__main__':
 
     with ptan.common.utils.RewardTracker(writer) as tracker:
         while True:
-            frame += params.n_envs
+            frame += 1
             eps_tracker.frame(frame)
-            buffer.populate(params.n_envs)
+            buffer.populate(1)
             reward = exp_src.pop_total_rewards()
             if reward:
                 episode += 1
@@ -101,7 +108,7 @@ if __name__ == '__main__':
                 continue
 
             optimizer.zero_grad()
-            batch = buffer.sample(params.batch_size * params.n_envs)
+            batch = buffer.sample(params.batch_size)
             loss_v = utils.calc_loss_dqn(
                 batch, net, tgt_net, params.gamma**params.steps, device)
             loss_v.backward()

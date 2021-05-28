@@ -57,6 +57,8 @@ def createEnvs(params, stack_frames=4, episodic_life=True, reward_clipping=True)
     for _ in range(params.n_envs):
         env = gym.make(params.env)
         env = ptan.common.wrappers.wrap_dqn(env,stack_frames, episodic_life, reward_clipping)
+        if params.max_steps is not None:
+            env = atari_wrappers.TimeLimit(env, params.max_steps)
         if params.seed: env.seed(params.seed)
         envs.append(env)
     return envs
@@ -68,8 +70,10 @@ def bad_wrap_dqn(params):
     for _ in range(params.n_envs):
         env = atari_wrappers.make_atari(
             params.env, skip_noop=True, skip_maxskip=True)
-        env = atari_wrappers.wrap_deepmind(env, episode_life=True, clip_rewards=False, frame_stack=True,
-                                            pytorch_img=True, frame_stack_count= 4, skip_firereset=True)
+        env = atari_wrappers.wrap_deepmind(env, episode_life=True, scale =False,
+                                           clip_rewards=False, frame_stack=True,
+                                            pytorch_img=True, frame_stack_count= 4,
+                                            skip_firereset=True)
         if params.seed:
             env.seed(params.seed)
         envs.append(env)
@@ -86,7 +90,7 @@ def writerDir(env, steps):
     log_dir = os.path.join('runs', sub_folder)
     return folder, sub_folder, log_dir
 
-
+@torch.no_grad()
 def play(game, agent=None, wait=0.0, render=True):
     if not isinstance(game, gym.Env):
         env = createEnvs(game,stack_frames=4, episodic_life=False, reward_clipping=False)[0]
@@ -94,7 +98,9 @@ def play(game, agent=None, wait=0.0, render=True):
         env = game
     state = env.reset()
     rewards = 0
+    steps = 0
     while True:
+        steps += 1
         if render:
             env.render()
             time.sleep(wait)
@@ -106,6 +112,6 @@ def play(game, agent=None, wait=0.0, render=True):
         state, reward, done, _ = env.step(action)
         rewards += reward
         if done:
-            print('Finished playing with {} rewards'.format(rewards))
+            print('Done!\nPlayed {} steps and got {} rewards'.format(steps, rewards))
             break
     env.close()
