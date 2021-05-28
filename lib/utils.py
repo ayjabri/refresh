@@ -67,6 +67,7 @@ def createEnvs(params, stack_frames=4, episodic_life=True, reward_clipping=True)
 
 
 class MeanRewardsMonitor:
+    """Track mean rewards, save model each new reward"""
     def __init__(self, env, net, algorithm, solve_rewrads, path='../data'):
 
         self.env = env
