@@ -80,16 +80,9 @@ if __name__ == '__main__':
     buffer = ptan.experience.ExperienceReplayBuffer(
         exp_src, params.buffer_size)
 
-    folder = (env.game + '_' + ALGORITHM).capitalize()
-    sub_folder = datetime.now().strftime('%h_%d_%Y_%H_%M_') + \
-        str(params.steps)+'_steps'
+    mean_monitor = utils.MeanRewardsMonitor(env, net, ALGORITHM, params.solve_rewards)
 
-    if not os.path.exists(os.path.join(folder, sub_folder)):
-        os.makedirs(os.path.join(folder, sub_folder))
-
-    log_dir = os.path.join('runs', sub_folder)
-
-    writer = SummaryWriter(logdir=log_dir, comment=params.frame_stack)
+    writer = SummaryWriter(logdir=mean_monitor.runs_dir, comment=params.frame_stack)
     
     optimizer = torch.optim.Adam(net.parameters(), lr=params.lr)
     lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', patience=10_000, verbose=True,
@@ -113,17 +106,8 @@ if __name__ == '__main__':
                 episode += 1
                 mean = tracker.reward(
                     reward[0], frame, epsilon=selector.epsilon)
-                if mean:
-                    if int(mean) > best_reward:
-                        best_reward = int(mean)
-                        save_time = datetime.now().strftime('%H_%M')
-                        save_path = os.path.join(folder, sub_folder, str(
-                            int(best_reward)) + '_' + save_time + '_.dat')
-                        torch.save(net.state_dict(), f=save_path)
-                    if mean > params.solve_rewards:
-                        duration = datetime.now()-start_time
-                        print(f'Solved in {duration}')
-                        break
+                if mean_monitor(mean):
+                    break
 
             if len(buffer) < params.init_replay:
                 continue
@@ -135,8 +119,8 @@ if __name__ == '__main__':
             loss_v.backward()
             optimizer.step()
 
-            if mean:
-                lr_scheduler.step(int(best_reward))
+            if mean and selector.epsilon <= params.eps_final:
+                lr_scheduler.step(mean_monitor.best_reward)
                 writer.add_scalar(
                     'LearningRate', scalar_value=lr_scheduler._last_lr, global_step=frame)
 

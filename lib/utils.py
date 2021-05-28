@@ -56,44 +56,60 @@ def createEnvs(params, stack_frames=4, episodic_life=True, reward_clipping=True)
     envs = []
     for _ in range(params.n_envs):
         env = gym.make(params.env)
-        env = ptan.common.wrappers.wrap_dqn(env,stack_frames, episodic_life, reward_clipping)
+        env = ptan.common.wrappers.wrap_dqn(
+            env, stack_frames, episodic_life, reward_clipping)
         if params.max_steps is not None:
             env = atari_wrappers.TimeLimit(env, params.max_steps)
-        if params.seed: env.seed(params.seed)
-        envs.append(env)
-    return envs
-
-
-def bad_wrap_dqn(params):
-    """ Very bad wrappers that eat up the memory up to 100%! I don't know why """
-    envs = []
-    for _ in range(params.n_envs):
-        env = atari_wrappers.make_atari(
-            params.env, skip_noop=True, skip_maxskip=True)
-        env = atari_wrappers.wrap_deepmind(env, episode_life=True, scale =False,
-                                           clip_rewards=False, frame_stack=True,
-                                            pytorch_img=True, frame_stack_count= 4,
-                                            skip_firereset=True)
         if params.seed:
             env.seed(params.seed)
         envs.append(env)
     return envs
 
 
-def writerDir(env, steps):
-    folder = (env.game + '_' + "DQN").capitalize()
-    sub_folder = datetime.now().strftime('%h_%d_%Y_%H_%M_')+str(steps)+'_steps'
+class MeanRewardsMonitor:
+    def __init__(self, env, net, algorithm, solve_rewrads, path='../data'):
 
-    if not os.path.exists(os.path.join(folder, sub_folder)):
-        os.makedirs(os.path.join(folder, sub_folder))
+        self.env = env
+        self.net = net
 
-    log_dir = os.path.join('runs', sub_folder)
-    return folder, sub_folder, log_dir
+        self.path = path
+        self.algorithm = algorithm
+        self.solve_rewrads = solve_rewrads
+
+        self.start = datetime.now()
+        self.best_reward = -float('inf')
+        self.get_runs_save_dir()
+
+    def get_runs_save_dir(self):
+        fsub = datetime.now().strftime('%m%d%Y_%H%M')
+        self.runs_dir = os.path.join(self.path, self.env.game, 'runs', fsub)
+        self.save_dir = os.path.join(
+            self.path, self.env.game, 'models', self.algorithm, fsub)
+
+        if not os.path.exists(self.runs_dir):
+            os.makedirs(self.runs_dir)
+        if not os.path.exists(self.save_dir):
+            os.makedirs(self.save_dir)
+
+    def __call__(self, mean):
+        if mean:
+            if mean > self.best_reward:
+                self.best_reward = int(mean)
+                save_path = os.path.join(
+                    self.save_dir, str(self.best_reward) + '.dat')
+                torch.save(self.net.state_dict(), f=save_path)
+            if mean > self.solve_rewrads:
+                duration = datetime.now()-self.start
+                print(f'Solved in {duration}')
+                return True
+        return False
+
 
 @torch.no_grad()
 def play(game, agent=None, wait=0.0, render=True):
     if not isinstance(game, gym.Env):
-        env = createEnvs(game,stack_frames=4, episodic_life=False, reward_clipping=False)[0]
+        env = createEnvs(game, stack_frames=4,
+                         episodic_life=False, reward_clipping=False)[0]
     else:
         env = game
     state = env.reset()
