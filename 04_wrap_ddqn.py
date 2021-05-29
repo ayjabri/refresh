@@ -34,7 +34,7 @@ if __name__ == '__main__':
     # We're using light wrappers that stacks 2 frames and using PIL-smid library
     # Accordign to MaxLapan this should improve both fps and convergance
     env_ = gym.make(params.env)
-    env = atari_wrappers.wrap_dqn_light(env_)
+    env = atari_wrappers.wrap_dqn_light(env_, stack_frames=2, skip=6)
 
     shape = env.observation_space.shape
     actions = env.action_space.n
