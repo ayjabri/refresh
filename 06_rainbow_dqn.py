@@ -16,6 +16,10 @@ from datetime import datetime
 from lib import data, utils, model, play
 
 
+ALGORITHM = 'RAINBOW_DDQN'
+GAMES = list(data.params.keys())
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--cuda', action='store_true',
