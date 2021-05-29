@@ -66,7 +66,7 @@ if __name__ == '__main__':
 
     optimizer = torch.optim.Adam(net.parameters(), lr=params.lr)
     lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', patience=10_000, verbose=True,
-                                                              factor=0.75, min_lr=1e-6, cooldown=10_000)
+                                                              factor=0.75, min_lr=params.min_lr, cooldown=10_000)
     print(net)
     print('*'*10, ' Start Training ',
           envs[0].game, ' {} '.format(device), '*'*10)

@@ -62,7 +62,7 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(net.parameters(), lr=params.lr)
     lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
                                                               mode='max', patience=10_000, verbose=True,
-                                                              factor=0.75, min_lr=1e-6, cooldown=10_000)
+                                                              factor=0.75, min_lr=params.min_lr, cooldown=10_000)
     print(net)
     print('*'*10, ' Start Training ',
           env.game, ' {} '.format(device), '*'*10)
@@ -83,17 +83,6 @@ if __name__ == '__main__':
                     reward[-1], frame, epsilon=selector.epsilon)
                 if mean_monitor(mean):
                     break
-                # if mean:
-                #     if int(mean) > best_reward:
-                #         best_reward = int(mean)
-                #         save_time = datetime.now().strftime('%H_%M')
-                #         save_path = os.path.join(folder, sub_folder, str(
-                #             int(best_reward)) + '_' + save_time + '_.dat')
-                #         torch.save(net.state_dict(), f=save_path)
-                #     if mean > params.solve_rewards:
-                #         duration = datetime.now()-start_time
-                #         print(f'Solved in {duration}')
-                #         break
 
             if len(buffer) < params.init_replay:
                 continue

@@ -101,7 +101,7 @@ if __name__ == '__main__':
 
     optimizer = torch.optim.Adam(net.parameters(), lr=params.lr)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.75, patience=20000,
-                                                           cooldown=20000, verbose=True, min_lr=1e-7)
+                                                           cooldown=20000, verbose=True, min_lr=params.min_lr)
     mean = None
     best_reward = -float('inf')
     st = datetime.now()

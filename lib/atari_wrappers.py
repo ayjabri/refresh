@@ -154,18 +154,17 @@ class SkipEnv(gym.Wrapper):
 
 
 
-def wrap_dqn_light(env, stack_frames=2, max_episode_steps=None,
+def wrap_dqn_light(env, stack_frames=2, skip=4, max_episode_steps=None,
                    episodic_life=True, reward_clipping=True):
     """Apply a lightweight wrapper for faster DQN training."""
     assert "NoFrameskip" in env.spec.id
     if episodic_life:
         env = wrappers.EpisodicLifeEnv(env)
-    env = SkipEnv(env, skip=4)
+    env = SkipEnv(env, skip=skip)
     if max_episode_steps is not None:
         env = wrappers.TimeLimit(env, max_episode_steps=max_episode_steps)
     if 'FIRE' in env.unwrapped.get_action_meanings():
         env = wrappers.FireResetEnv(env)
-    # env = ptan.common.wrappers.ProcessFrame84(env)
     env = WarpFrame(env)
     env = wrappers.ImageToPyTorch(env)
     env = wrappers.FrameStack(env, stack_frames)
