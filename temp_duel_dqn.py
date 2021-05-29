@@ -5,13 +5,15 @@ Created on Wed May 19 05:45:57 2021
 
 @author: ayman
 """
+import argparse
 import os
+from datetime import datetime
+
 import ptan
 import torch
-import argparse
 from tensorboardX import SummaryWriter
-from lib import utils, model, data
-from datetime import datetime
+
+from lib import data, model, utils
 
 ALGORITHM = 'DDQN'
 
