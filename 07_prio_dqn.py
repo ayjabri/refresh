@@ -15,7 +15,7 @@ from cpprb import ReplayBuffer, PrioritizedReplayBuffer
 from lib import data, utils, model
 from torch.utils.tensorboard import SummaryWriter
 
-
+GAMES = list(data.params.keys())
 END_BETA_FRAME = 500_000
 BETA = 0.4
 TGT_BETA = 1.0
@@ -55,7 +55,7 @@ if __name__ == '__main__':
                         help='steps to skip while training')
     parser.add_argument('-n', '--envs', default=3, type=int,
                         help='Number of environments to run simultaneously')
-    parser.add_argument('-g', '--game', default='invaders',
+    parser.add_argument('-g', '--game', default='invaders', choices=GAMES,
                         help='OpenAI gym environment name')
     parser.add_argument('--play', action='store_true',
                         help='Play a game when the environment is solved')

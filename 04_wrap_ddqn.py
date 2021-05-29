@@ -16,11 +16,11 @@ from lib import utils, model, data, atari_wrappers
 from datetime import datetime
 
 ALGORITHM = 'DDQN_WRAP'
-
+GAMES = list(data.params.keys())
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--env', default='pong',
+    parser.add_argument('--env', default='pong', choices=GAMES,
                         help='OpenAI gym environment name.\n Default: pong')
     parser.add_argument('--cuda', action='store_true',
                         help='Activate GPU in training')

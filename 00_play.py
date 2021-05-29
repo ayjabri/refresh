@@ -13,7 +13,7 @@ from torch import load
 from lib import data, utils, model
 
 
-GAMES = ['pong', 'breakout', 'boxing', 'invaders', 'bowling']
+GAMES = list(data.params.keys())
 
 
 if __name__=='__main__':

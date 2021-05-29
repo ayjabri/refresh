@@ -36,7 +36,7 @@ from lib import mp_utils, model, data, utils
 from collections import deque
 
 THREADS = 4
-
+GAMES = list(data.params.keys())
 
 @torch.no_grad()
 def play(env, agent):
@@ -63,7 +63,7 @@ if __name__ == '__main__':
                         help='play and episode once finished training')
     parser.add_argument('--save', '-s', action='store_true', default=True,
                         help='Save a copy of the trained network in current directory as "game_dqn.dat"')
-    parser.add_argument('--env', default='invaders',
+    parser.add_argument('--env', default='pong', choices=GAMES,
                         help='name of the game: invaders(default), pong, breakout')
     parser.add_argument('--cuda', action='store_true',
                         help='Train on GPU when available')
