@@ -44,10 +44,12 @@ if __name__ == '__main__':
         if params.seed:
             env.seed(params.seed)
         envs.append(env)
+
     shape = env.observation_space.shape
     actions = env.action_space.n
     net = model.DDQN(shape, actions).to(device)
     tgt_net = ptan.agent.TargetNet(net)
+
     selector = ptan.actions.EpsilonGreedyActionSelector(
         epsilon=params.eps_start)
     eps_tracker = ptan.actions.EpsilonTracker(
@@ -70,7 +72,7 @@ if __name__ == '__main__':
 
     print(net)
     print(
-        5*'*', f' Training {envs[0].game}: {device}/{params.envs} environments/{params.steps} steps', '*'*5)
+        5*'*', f' Training {env.game}: {device}/{params.n_envs} environments/{params.steps} steps', '*'*5)
     
     # play init_replay steps before training
     buffer.populate(params.init_replay)
@@ -78,10 +80,12 @@ if __name__ == '__main__':
 
     frame = 0
     episode = 0
+    mean = None
+    
     with ptan.common.utils.RewardTracker(writer) as tracker:
         while True:
             frame += params.n_envs
-            buffer.populate(params.envs)
+            buffer.populate(params.n_envs)
             eps_tracker.frame(frame)
             reward = exp_source.pop_total_rewards()
             if reward:
@@ -103,6 +107,7 @@ if __name__ == '__main__':
                 lr_scheduler.step(mean_monitor.best_reward)
                 writer.add_scalar(
                     'LearningRate', scalar_value=lr_scheduler._last_lr, global_step=frame)
+
             del batch, loss_v
             if frame % 1000 == 0:
                 tgt_net.sync()
