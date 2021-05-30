@@ -30,6 +30,8 @@ if __name__ == '__main__':
                         help='Number of environments to run simultaneously')
     parser.add_argument('--env', default='invaders',
                         help='OpenAI gym environment name')
+    parser.add_argument('--stack', default=2, type=int, help='Frames to stack in each observation')
+    parser.add_argument('--skip', default=6, type=int, help='Frames to skip when stacking')
     args = parser.parse_args()
 
     device = 'cuda' if args.cuda else 'cpu'
@@ -40,7 +42,7 @@ if __name__ == '__main__':
     envs = []
     for _ in range(params.n_envs):
         env = gym.make(params.env)
-        env = atari_wrappers.wrap_dqn_light(env, 2, 6)
+        env = atari_wrappers.wrap_dqn_light(env, args.stack, args.skip)
         if params.seed:
             env.seed(params.seed)
         envs.append(env)
@@ -73,7 +75,7 @@ if __name__ == '__main__':
     print(net)
     print(
         5*'*', f' Training {env.game}: {device}/{params.n_envs} environments/{params.steps} steps', '*'*5)
-    
+
     # play init_replay steps before training
     buffer.populate(params.init_replay)
     exp_source.pop_rewards_steps()
@@ -81,7 +83,7 @@ if __name__ == '__main__':
     frame = 0
     episode = 0
     mean = None
-    
+
     with ptan.common.utils.RewardTracker(writer) as tracker:
         while True:
             frame += params.n_envs
