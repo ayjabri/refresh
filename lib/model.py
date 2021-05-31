@@ -135,3 +135,76 @@ class DDQN(nn.Module):
         fx = self.frwdConv(x)
         val, adv = self.frwdLin(fx)
         return val + (adv - adv.mean(dim=1, keepdim=True))
+
+
+
+class ResNetDDQN(nn.Module):
+    def __init__(self, shape, actions):
+        super().__init__()
+        assert shape[1] == shape[2]
+        self.shape = shape
+        self.actions = actions
+
+        self.conv_input = nn.Sequential(nn.Conv2d(shape[0], 32, 3, 1, padding=1),
+                                        nn.BatchNorm2d(32),
+                                        nn.LeakyReLU(),
+                                        nn.Conv2d(32, 64, 3, 1, padding=1),
+                                        nn.BatchNorm2d(64),
+                                        nn.LeakyReLU())
+
+        self.conv1 = nn.Sequential(nn.Conv2d(64, 64, 3, 1, padding=1),
+                                        nn.BatchNorm2d(64),
+                                        nn.LeakyReLU())
+
+        self.conv2 = nn.Sequential(nn.Conv2d(64, 64, 3, 1, padding=1),
+                                        nn.BatchNorm2d(64),
+                                        nn.LeakyReLU())
+
+        self.conv3 = nn.Sequential(nn.Conv2d(64, 64, 3, 1, padding=1),
+                                        nn.BatchNorm2d(64),
+                                        nn.LeakyReLU())
+
+        self.conv4 = nn.Sequential(nn.Conv2d(64, 64, 3, 1, padding=1),
+                                        nn.BatchNorm2d(64),
+                                        nn.LeakyReLU())
+
+        # Value head
+        self.conv_val = nn.Sequential(nn.Conv2d(64, 64, 3,1, padding=1),
+                                      nn.BatchNorm2d(64),
+                                      nn.ReLU(),
+                                      nn.AdaptiveMaxPool2d(10),
+                                      nn.Flatten())
+
+        _output_size = self._get_conv_size()
+
+        self.fc_val = nn.Sequential(nn.Linear(_output_size, 256),
+                                    nn.ReLU(),
+                                    nn.Linear(256,1))
+
+        # Advantage head
+        self.conv_adv = nn.Sequential(nn.Conv2d(64, 64, 3,1,padding=1),
+                                      nn.BatchNorm2d(64),
+                                      nn.ReLU(),
+                                      nn.AdaptiveMaxPool2d(10),
+                                      nn.Flatten())
+
+        self.fc_adv = nn.Sequential(nn.Linear(_output_size, 256),
+                                    nn.ReLU(),
+                                    nn.Linear(256,actions))
+
+    def forward(self, x):
+        x = x.float()/255
+        v = self.conv_input(x)
+        v += self.conv1(v)
+        v += self.conv2(v)
+        v += self.conv3(v)
+        v += self.conv4(v)
+        val = self.conv_val(v)
+        val = self.fc_val(val)
+        adv = self.conv_adv(v)
+        adv = self.fc_adv(adv)
+        return val + (adv - adv.mean(dim=1, keepdim=True))
+
+    def _get_conv_size(self):
+        s = self.conv_input(torch.zeros(1, *self.shape))
+        return self.conv_val(s).shape[1]
