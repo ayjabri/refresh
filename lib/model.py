@@ -7,108 +7,33 @@ Created on Mon May 17 12:55:50 2021
 """
 import torch
 import torch.nn as nn
+import torchvision as tv
 
-
-class DQNetConv(nn.Module):
-    def __init__(self, shape, actions, device='cpu'):
-        super().__init__()
-        self.shape = shape
-        self.features = shape[0]
-        self.actions = actions
-        self.device = device
-
-        self.input = nn.Conv2d(in_channels=self.features,
-                               out_channels=32, kernel_size=8, stride=4)
-        self.conv1 = nn.Conv2d(
-            in_channels=32, out_channels=64, kernel_size=4, stride=2)
-        self.conv2 = nn.Conv2d(
-            in_channels=64, out_channels=64, kernel_size=3, stride=1)
-        in_features = self.__getConvSize__()
-        self.fc1 = nn.Linear(in_features=in_features, out_features=512)
-        self.output = nn.Linear(in_features=512, out_features=actions)
-
-        self.to(device)
-
-    def __frwdConv__(self, x):
-        y = torch.relu(self.input(x))
-        y = torch.relu(self.conv1(y))
-        return torch.relu(self.conv2(y))
-
-    def __frwdFc__(self, x):
-        y = torch.relu(self.fc1(x))
-        return self.output(y)
-
-    def __getConvSize__(self):
-        x = torch.zeros(1, *self.shape)
-        o = self.__frwdConv__(x)
-        o = torch.flatten(o, start_dim=1)
-        return o.shape[1]
-
-    def forward(self, x):
-        fx = x.float()/255
-        y = self.__frwdConv__(fx)
-        y = torch.flatten(y, start_dim=1)
-        y = self.__frwdFc__(y)
-        return y
-
-
-class DuelDQNet(nn.Module):
-    def __init__(self, shape, actions):
-        super().__init__()
-        self.shape = shape
-        self.actions = actions
-
-        self.conv = nn.Sequential(nn.Conv2d(shape[0], 32, 8, 4),
-                                  nn.BatchNorm2d(32),
-                                  nn.ReLU(),
-                                  nn.Conv2d(32, 64, 4, 2),
-                                  nn.BatchNorm2d(64),
-                                  nn.ReLU(),
-                                  nn.Conv2d(64, 64, 2, 1),
-                                  nn.BatchNorm2d(64),
-                                  nn.ReLU(),
-                                  nn.Flatten())
-
-        conv_out_shape = self.conv(torch.zeros(1, *shape)).shape[1]
-
-        self.val = nn.Sequential(nn.Linear(conv_out_shape, 256),
-                                 # nn.LayerNorm(256),
-                                 nn.ReLU(),
-                                 nn.Linear(256, 1))
-
-        self.adv = nn.Sequential(nn.Linear(conv_out_shape, 256),
-                                 # nn.LayerNorm(256),
-                                 nn.ReLU(),
-                                 nn.Linear(256, actions))
-
-    def forward(self, x):
-        fx = x.float()/255
-        y = self.conv(fx)
-        val = self.val(y)
-        adv = self.adv(y)
-        return val + (adv - adv.mean(dim=1, keepdim=True))
 
 
 class DDQN(nn.Module):
+    """
+    Duel DeepQ Neural Network.
+    shape: Tuple of (N Stack, Height, Width)
+    actions: Discrete number of action from action_space
+    """
     def __init__(self, shape, actions):
         super().__init__()
         self.shape = shape
         self.actions = actions
 
-        self.conv1 = nn.Conv2d(
-            in_channels=shape[0], out_channels=32, kernel_size=8, stride=4)
+        self.conv1 = nn.Conv2d(in_channels=shape[0], out_channels=32, kernel_size=8, stride=4, bias=False)
         self.norm1 = nn.BatchNorm2d(32)
         self.act1 = nn.ReLU()
-        self.conv2 = nn.Conv2d(
-            in_channels=32, out_channels=64, kernel_size=4, stride=2)
+        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2, bias=False)
         self.norm2 = nn.BatchNorm2d(64)
         self.act2 = nn.ReLU()
-        self.conv3 = nn.Conv2d(
-            in_channels=64, out_channels=64, kernel_size=2, stride=1)
+        self.conv3 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=2, stride=1, bias=False)
         self.norm3 = nn.BatchNorm2d(64)
         self.act3 = nn.ReLU()
 
         linear_input_ = self.frwdConv(torch.zeros(1, *shape)).shape[1]
+
         self.val1 = nn.Linear(in_features=linear_input_, out_features=256)
         self.vact1 = nn.ReLU()
         self.val2 = nn.Linear(in_features=256, out_features=1)
@@ -138,73 +63,44 @@ class DDQN(nn.Module):
 
 
 
+
 class ResNetDDQN(nn.Module):
+    """
+    Pre-trained ResNet 18 with the following features:
+        1- Fix the first 3 Convu
+
+    ** Experemental
+    """
     def __init__(self, shape, actions):
         super().__init__()
-        assert shape[1] == shape[2]
+        assert shape[0] == 3
+
         self.shape = shape
         self.actions = actions
+        self._load_resnet()
 
-        self.conv_input = nn.Sequential(nn.Conv2d(shape[0], 32, 3, 1, padding=1),
-                                        nn.BatchNorm2d(32),
-                                        nn.LeakyReLU(),
-                                        nn.Conv2d(32, 64, 3, 1, padding=1),
-                                        nn.BatchNorm2d(64),
-                                        nn.LeakyReLU())
+        conv_out_shape = self.resnet(torch.zeros(1, *shape)).shape[1]
 
-        self.conv1 = nn.Sequential(nn.Conv2d(64, 64, 3, 1, padding=1),
-                                        nn.BatchNorm2d(64),
-                                        nn.LeakyReLU())
+        self.val = nn.Sequential(nn.Linear(conv_out_shape, 256),
+                                 nn.ReLU(),
+                                 nn.Linear(256, 1))
 
-        self.conv2 = nn.Sequential(nn.Conv2d(64, 64, 3, 1, padding=1),
-                                        nn.BatchNorm2d(64),
-                                        nn.LeakyReLU())
+        self.adv = nn.Sequential(nn.Linear(conv_out_shape, 256),
+                                 nn.ReLU(),
+                                 nn.Linear(256, actions))
 
-        self.conv3 = nn.Sequential(nn.Conv2d(64, 64, 3, 1, padding=1),
-                                        nn.BatchNorm2d(64),
-                                        nn.LeakyReLU())
 
-        self.conv4 = nn.Sequential(nn.Conv2d(64, 64, 3, 1, padding=1),
-                                        nn.BatchNorm2d(64),
-                                        nn.LeakyReLU())
-
-        # Value head
-        self.conv_val = nn.Sequential(nn.Conv2d(64, 64, 3,1, padding=1),
-                                      nn.BatchNorm2d(64),
-                                      nn.ReLU(),
-                                      nn.AdaptiveMaxPool2d(10),
-                                      nn.Flatten())
-
-        _output_size = self._get_conv_size()
-
-        self.fc_val = nn.Sequential(nn.Linear(_output_size, 256),
-                                    nn.ReLU(),
-                                    nn.Linear(256,1))
-
-        # Advantage head
-        self.conv_adv = nn.Sequential(nn.Conv2d(64, 64, 3,1,padding=1),
-                                      nn.BatchNorm2d(64),
-                                      nn.ReLU(),
-                                      nn.AdaptiveMaxPool2d(10),
-                                      nn.Flatten())
-
-        self.fc_adv = nn.Sequential(nn.Linear(_output_size, 256),
-                                    nn.ReLU(),
-                                    nn.Linear(256,actions))
+    def _load_resnet(self):
+        freez = ['layer1', 'layer2', 'layer3']
+        self.resnet = tv.models.resnet18(True)
+        for l in freez:
+            for p in getattr(self.resnet, l).parameters():
+                p.requires_grad = False
+        self.resnet.fc = nn.Identity()
 
     def forward(self, x):
-        x = x.float()/255
-        v = self.conv_input(x)
-        v += self.conv1(v)
-        v += self.conv2(v)
-        v += self.conv3(v)
-        v += self.conv4(v)
-        val = self.conv_val(v)
-        val = self.fc_val(val)
-        adv = self.conv_adv(v)
-        adv = self.fc_adv(adv)
+        fx = x.float()/255
+        rx = self.resnet(fx)
+        val = self.val(rx)
+        adv = self.adv(rx)
         return val + (adv - adv.mean(dim=1, keepdim=True))
-
-    def _get_conv_size(self):
-        s = self.conv_input(torch.zeros(1, *self.shape))
-        return self.conv_val(s).shape[1]
