@@ -12,7 +12,7 @@ import time
 import argparse
 
 import torch
-import torch.nn as nn
+# import torch.nn as nn
 import numpy as np
 from datetime import datetime
 from . import atari_wrappers
@@ -178,19 +178,21 @@ def play(game, agent=None, wait=0.0, render=True):
 
 
 
-def argpars_dqn():
+def argpars_dqn(message):
     """Standard arg parse to use in DQN trainings"""
 
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description=message, epilog='Thank you for using my script. Ayman Al Jabri! :)',
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
     parser.add_argument('--cuda',   action='store_true', help='Train on GPU')
-    parser.add_argument('--env',    default='pong', help='OpenAI gym environment name')
-    parser.add_argument('--lr',     type=int, help='Learning Rate')
+    parser.add_argument('--env',    default='pong', help='Name of OpenAI gym environment to train')
+    parser.add_argument('--lr',     type=float, help='Learning Rate')
     parser.add_argument('--batch',  type=int, help='Batch size')
-    parser.add_argument('--n_envs', type=int, help='Number of environments to run simultaneously')
-    parser.add_argument('--stack',  default=2, type=int, help='Frames to stack in each observation')
-    parser.add_argument('--steps',  type=int, help='steps to skip while training')
-    parser.add_argument('--max',    type=int, help='Maximum steps of episodes')
-    parser.add_argument('--skip',   default=6, type=int, help='Frames to skip when stacking. Default=6')
+    parser.add_argument('--n_envs', type=int, help='Number of environments to run')
+    parser.add_argument('--stack',  default=2, type=int, help='Stack this number of frames in each observation')
+    parser.add_argument('--steps',  type=int, help='Steps to take when training. Rewards will be discounted by gamma**steps, and the agent will repeat the same action for these steps')
+    parser.add_argument('--max',    type=int, help='Maximum steps of episodes before ending it')
+    parser.add_argument('--skip',   default=6, type=int, help='Skip frames when stacking them')
     parser.add_argument('--resnet', action='store_true', help='Use ResNet DDQ network in training')
 
     return parser.parse_args()

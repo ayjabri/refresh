@@ -13,15 +13,14 @@ import ptan
 import torch
 import torch.nn as nn
 import numpy as np
-from lib import utils, atari_wrappers
+from lib import utils, atari_wrappers, data
 from tensorboardX import SummaryWriter
 
 ALGORITHM = "DQRNN"
 
-#%%
 
 class DRQNet(nn.Module):
-    def __init__(self, shape, actions, conv_features=32, num_layers=2, hidden_size=48, device='cuda'):
+    def __init__(self, shape, actions, conv_features=64, num_layers=4, hidden_size=128, device='cuda'):
         super(DRQNet, self).__init__()
 
         self.shape = shape
@@ -35,9 +34,10 @@ class DRQNet(nn.Module):
                                   nn.ReLU(),
                                   nn.Conv2d(32, conv_features, kernel_size=4, stride=2, bias=False),
                                   nn.ReLU(),
-                                  nn.Conv2d(conv_features, conv_features, kernel_size=3, stride=1, bias=False),
+                                  nn.Conv2d(conv_features, conv_features,
+                                            kernel_size=3, stride=1, bias=False),
                                   nn.ReLU(),
-                                  nn.AdaptiveMaxPool2d((conv_features,1))
+                                  nn.AdaptiveMaxPool2d((conv_features, 1))
                                   )
 
         self.gru_input = self._gru_input_size()
@@ -50,29 +50,27 @@ class DRQNet(nn.Module):
         self.fc = nn.Sequential(nn.Flatten(1),
                                 nn.Linear(fc_input_size, actions))
         self.to(device)
+
     def forward(self, x, hidden):
+        """
+        GRU <- (batch, h, w)
+        h0: (layers, batch, hidden_size)
+        """
         fx = x.float()/255
         out = self.conv(fx)
-
         # gru_input: (batch, h, w), h0: (layers, batch, hidden_size)
         self.gru.flatten_parameters()
-        out, new_hidden = self.gru(out[:,:,:,-1], hidden)
+        out, new_hidden = self.gru(out[:, :, :, -1], hidden)
         out = self.fc(self.act(out))
         return out, new_hidden
 
-
     def _gru_input_size(self):
-        o = torch.zeros(1,*self.shape)
+        o = torch.zeros(1, *self.shape)
         return np.product(self.conv(o).detach().numpy().shape[-2:])
 
-    def init_hidden(self,batch_size):
+    def init_hidden(self, batch_size):
         return torch.zeros(self.num_layers, batch_size, self.hidden_size).to(self.device)
 
-# shape = (2,84,84)
-# actions = 6
-# net = DRQNet(shape, actions, conv_features=32, num_layers=2, hidden_size=96, device='cpu')
-
-#%%
 
 def unpack_batch(batch):
     """Unpack standard ptan experience first-last batch."""
@@ -92,19 +90,14 @@ def unpack_batch(batch):
         np.array(dones), np.array(last_states, copy=False)
 
 
-
 def calc_loss_dqn(batch, net, tgt_net, gamma, device="cpu"):
     """Calculate DeepQ Loss """
     states, actions, rewards, dones, next_states = unpack_batch(batch)
-
     states_v = torch.tensor(states).to(device)
     actions_v = torch.tensor(actions).to(device)
     rewards_v = torch.tensor(rewards).to(device)
     done_mask = torch.tensor(dones).to(device)
-
     state_action_values = net(states_v).gather(1, actions_v.unsqueeze(-1)).squeeze(-1)
-    # Q_values = net(states_v)
-    # state_action_values = Q_values[range(len(actions)), actions]
     with torch.no_grad():
         next_states_v = torch.tensor(next_states).to(device)
         next_state_values = tgt_net(next_states_v).max(1)[0]
@@ -113,44 +106,43 @@ def calc_loss_dqn(batch, net, tgt_net, gamma, device="cpu"):
     return torch.nn.functional.mse_loss(state_action_values, expected_state_action_values)
 
 
+if __name__ == '__main__':
+    message = '*** Using Deep Recurrent Q-Learning Algorithm *** '
+    args = utils.argpars_dqn(message)
+    params = data.params[args.env]
+    utils.update_params(params, args)
 
-if __name__=='__main__':
-    batch_size = 16
-    gamma = 0.99
-    device = 'cuda'
-    game = 'PongNoFrameskip-v4'
-    n_envs = 4
-    steps = 4
-    lr = 1e-3
+    device = 'cuda' if args.cuda else 'cpu'
+    # 'RiverraidNoFrameskip-v4' CentipedeNoFrameskip-v4 'PongNoFrameskip-v4'
 
     envs = []
-    for _ in range(n_envs):
-        env = gym.make(game)
-        env = atari_wrappers.wrap_dqn_light(env, 2, 6)
-        env.seed(212)
+    for _ in range(params.n_envs):
+        env = gym.make(params.env)
+        env = atari_wrappers.wrap_dqn_light(env, stack_frames=params.frame_stack,
+                                            skip=args.skip, max_episode_steps=args.max)
+        env.seed(params.seed)
         envs.append(env)
 
     shape = env.observation_space.shape
     actions = env.action_space.n
 
-    net = DRQNet(shape, actions)
-    net.to(device)
+    net = DRQNet(shape, actions, hidden_size=128, device=device)
     tgt_net = ptan.agent.TargetNet(net)
 
     selector = ptan.actions.ArgmaxActionSelector()
 
-    agent = ptan.agent.DQNAgent(lambda x: net(x, net.init_hidden(n_envs))[0], selector, device = device)
-    eps_tracker = ptan.actions.EpsilonTracker(selector, 1.0, 0.02, 50_000)
+    agent = ptan.agent.DQNAgent(lambda x: net(x, net.init_hidden(params.n_envs))[0], selector, device=device)
+    eps_tracker = ptan.actions.EpsilonTracker(selector, params.eps_start, params.eps_final, params.eps_frames)
 
-    exp_src = ptan.experience.ExperienceSourceFirstLast(envs, agent, gamma=0.99, steps_count=steps)
-    buffer = ptan.experience.ExperienceReplayBuffer(exp_src, 100_000)
+    exp_src = ptan.experience.ExperienceSourceFirstLast(envs, agent, gamma=params.gamma, steps_count=params.steps)
+    buffer = ptan.experience.ExperienceReplayBuffer(exp_src, params.buffer_size)
 
-    mean_monitor = utils.MeanRewardsMonitor(env, net, ALGORITHM, 17)
+    mean_monitor = utils.MeanRewardsMonitor(env, net, ALGORITHM, params.solve_rewards)
 
     writer = SummaryWriter(logdir=mean_monitor.runs_dir,
-                           comment=str(4))
+                           comment=str(params.n_envs))
 
-    optimizer = torch.optim.Adam(net.parameters(), lr=lr)
+    optimizer = torch.optim.Adam(net.parameters(), lr=params.lr,)
 
     print(net)
     print('*'*10, ' Start Training ',
@@ -160,9 +152,9 @@ if __name__=='__main__':
     episode = 0
     with ptan.common.utils.RewardTracker(writer) as tracker:
         while True:
-            frame += n_envs
+            frame += params.n_envs
             eps_tracker.frame(frame)
-            buffer.populate(n_envs)
+            buffer.populate(params.n_envs)
             reward = exp_src.pop_total_rewards()
             if reward:
                 episode += 1
@@ -171,17 +163,17 @@ if __name__=='__main__':
                 if mean_monitor(mean):
                     break
 
-            if len(buffer) < 5000:
+            if len(buffer) < params.init_replay:
                 continue
 
             optimizer.zero_grad()
-            batch = buffer.sample(batch_size)
+            batch = buffer.sample(params.batch_size)
             loss_v = calc_loss_dqn(batch,
-                                 lambda x: net(x, net.init_hidden(batch_size))[0],
-                                 lambda x: tgt_net.target_model(x, net.init_hidden(batch_size))[0],
-                                 gamma**steps, device=device)
+                                   lambda x: net(x, net.init_hidden(params.batch_size))[0],
+                                   lambda x: tgt_net.target_model(x, net.init_hidden(params.batch_size))[0],
+                                   params.gamma**params.steps, device=device)
             loss_v.backward()
             optimizer.step()
 
-            if frame % 1000 == 0:
+            if frame % params.sync_nets == 0:
                 tgt_net.sync()
