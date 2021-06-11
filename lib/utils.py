@@ -12,7 +12,7 @@ import time
 import argparse
 
 import torch
-# import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 from datetime import datetime
 from . import atari_wrappers
@@ -63,6 +63,35 @@ class MeanRewardsMonitor:
         return False
 
 
+class BatchGenerator:
+    def __init__(self, exp_source, params):
+        self.exp_source = exp_source
+        self.batch_size = params.batch_size
+        self.total_rewards = []
+        self.episodes = 0
+        self.frame = 0
+
+    def __iter__(self):
+        batch = []
+        for exp in self.exp_source:
+            self.frame += 1
+            rewards = self.exp_source.pop_total_rewards()
+            if rewards:
+                self.total_rewards.append(rewards[0])
+                self.episode += 1
+            batch.append(exp)
+            if len(batch) < self.batch_size:
+                continue
+            yield batch
+            batch.clear()
+
+    def mean(self):
+        if self.total_rewards:
+            return np.mean(self.total_rewards[-100:])
+        else:
+            return
+
+
 # =============================================================================
 # Support functions for DQN training
 # =============================================================================
@@ -104,8 +133,45 @@ def calc_loss_dqn(batch, net, tgt_net, gamma, device="cpu"):
         next_state_values = tgt_net.target_model(next_states_v).max(1)[0]
         next_state_values[done_mask] = 0.0
         expected_state_action_values = next_state_values.detach() * gamma + rewards_v
-    return torch.nn.functional.mse_loss(state_action_values, expected_state_action_values)
+    return F.mse_loss(state_action_values, expected_state_action_values)
 
+
+
+@torch.no_grad()
+def unpack_a2c_batch(batch, net, params, device='cpu'):
+    states, actions, rewards, dones, last_states = unpack_batch(batch)
+    not_done = dones == False
+    last_states_v = torch.FloatTensor(last_states[not_done]).to(device)
+    values = net(last_states_v)[1].data.cpu().numpy()[:,-1]
+    rewards[not_done] += values*params.gamma**params.steps
+    return states, actions, rewards
+
+
+
+
+def calc_loss_a2c(batch, net, params, device='cpu'):
+    states, actions, q_refs = unpack_a2c_batch(batch, net, params, device)
+    states_v = torch.FloatTensor(states).to(device)
+    q_refs_v = torch.FloatTensor(q_refs).to(device)
+    
+    logits_v, values_v = net(states_v)
+    
+    ## value loss
+    value_loss = F.mse_loss(values_v[:,-1], q_refs_v)
+    
+    ## policy loss
+    log_probs_v = F.log_softmax(logits_v, dim=1)
+    log_probs_a = log_probs_v[range(len(actions)), actions]
+    adv_v = q_refs_v - values_v[:,-1].detach()
+    policy_loss = - log_probs_a * adv_v
+    policy_loss = policy_loss.mean()
+    
+    ## entropy loss
+    probs_v = F.softmax(logits_v, dim=1)
+    entropy = - (probs_v * log_probs_v).sum(1).mean()
+    entropy_loss = - entropy * params.entropy_beta
+    
+    return value_loss, policy_loss, entropy_loss
 
 
 def createEnvs(params, stack_frames=4, episodic_life=True, reward_clipping=True):
@@ -207,3 +273,10 @@ def update_params(params, args):
     if args.stack   is not None: params.frame_stack = args.stack
     if args.steps   is not None: params.steps = args.steps
     if args.max     is not None: params.max_steps = args.max
+
+
+
+
+def count_parameters(net):
+    """Return the number of trainable parameters"""
+    return sum(p.numel() for p in net.parameters() if p.requires_grad)

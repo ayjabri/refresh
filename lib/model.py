@@ -104,3 +104,56 @@ class ResNetDDQN(nn.Module):
         val = self.val(rx)
         adv = self.adv(rx)
         return val + (adv - adv.mean(dim=1, keepdim=True))
+
+
+
+class A2CNet(nn.Module):
+    """
+    Actor-Critic network with two heads.
+    shape: Tuple of (N Stack, Height, Width)
+    probs: distribution over actions
+    vals: estimation of the state value
+    """
+    def __init__(self, shape, actions):
+        super().__init__()
+        self.shape = shape
+        self.actions = actions
+
+        self.conv1 = nn.Conv2d(in_channels=shape[0], out_channels=32, kernel_size=8, stride=4, bias=False)
+        self.norm1 = nn.BatchNorm2d(32)
+        self.act1 = nn.ReLU()
+        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2, bias=False)
+        self.norm2 = nn.BatchNorm2d(64)
+        self.act2 = nn.ReLU()
+        self.conv3 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=2, stride=1, bias=False)
+        self.norm3 = nn.BatchNorm2d(64)
+        self.act3 = nn.ReLU()
+
+        linear_input_ = self.frwdConv(torch.zeros(1, *shape)).shape[1]
+
+        self.val1 = nn.Linear(in_features=linear_input_, out_features=256)
+        self.vact1 = nn.ReLU()
+        self.val2 = nn.Linear(in_features=256, out_features=1)
+
+        self.pol1 = nn.Linear(in_features=linear_input_, out_features=256)
+        self.pact1 = nn.ReLU()
+        self.pol2 = nn.Linear(in_features=256, out_features=actions)
+
+    def frwdConv(self, o):
+        fo = o.float()/255
+        y = self.act1(self.norm1(self.conv1(fo)))
+        y = self.act2(self.norm2(self.conv2(y)))
+        y = self.act3(self.norm3(self.conv3(y)))
+        return torch.flatten(y, start_dim=1)
+
+    def frwdLin(self, y):
+        val = self.vact1(self.val1(y))
+        val = self.val2(val)
+        pol = self.pact1(self.pol1(y))
+        pol = self.pol2(pol)
+        return val, pol
+
+    def forward(self, x):
+        fx = self.frwdConv(x)
+        val, prob = self.frwdLin(fx)
+        return prob, val

@@ -55,7 +55,7 @@ def play(env, agent):
 
 if __name__ == '__main__':
     mp.set_start_method('spawn')
-    os.environ['OMP_NUM_THREADS'] = str(THREADS)
+    os.environ['OMP_NUM_THREADS'] = '1'
     os.environ['MKL_THREADING_LAYER'] = 'GNU'
 
     parser = argparse.ArgumentParser()

@@ -48,7 +48,9 @@ class DRQNet(nn.Module):
         fc_input_size = hidden_size * conv_features
 
         self.fc = nn.Sequential(nn.Flatten(1),
-                                nn.Linear(fc_input_size, actions))
+                                nn.Linear(fc_input_size, 512),
+                                nn.ReLU(),
+                                nn.Linear(512, actions))
         self.to(device)
 
     def forward(self, x, hidden):
@@ -131,7 +133,7 @@ if __name__ == '__main__':
 
     selector = ptan.actions.ArgmaxActionSelector()
 
-    agent = ptan.agent.DQNAgent(lambda x: net(x, net.init_hidden(params.n_envs))[0], selector, device=device)
+    agent = ptan.agent.DQNAgent(lambda x: net(x, None)[0], selector, device=device)
     eps_tracker = ptan.actions.EpsilonTracker(selector, params.eps_start, params.eps_final, params.eps_frames)
 
     exp_src = ptan.experience.ExperienceSourceFirstLast(envs, agent, gamma=params.gamma, steps_count=params.steps)
@@ -141,6 +143,8 @@ if __name__ == '__main__':
 
     writer = SummaryWriter(logdir=mean_monitor.runs_dir,
                            comment=str(params.n_envs))
+    writer.add_text(ALGORITHM+ ' HParams', str(vars(params)))
+    writer.add_text('Number of Trainable Parameters', str(utils.count_parameters(net)))
 
     optimizer = torch.optim.Adam(net.parameters(), lr=params.lr,)
 
