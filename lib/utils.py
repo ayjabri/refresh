@@ -68,7 +68,7 @@ class BatchGenerator:
         self.exp_source = exp_source
         self.batch_size = params.batch_size
         self.total_rewards = []
-        self.episodes = 0
+        self.episode = 0
         self.frame = 0
 
     def __iter__(self):
@@ -85,11 +85,11 @@ class BatchGenerator:
             yield batch
             batch.clear()
 
-    def mean(self):
-        if self.total_rewards:
-            return np.mean(self.total_rewards[-100:])
-        else:
-            return
+    def pop_total_rewards(self):
+        r = self.total_rewards
+        if r:
+            self.total_rewards = []
+        return r
 
 
 # =============================================================================
@@ -136,6 +136,9 @@ def calc_loss_dqn(batch, net, tgt_net, gamma, device="cpu"):
     return F.mse_loss(state_action_values, expected_state_action_values)
 
 
+# =============================================================================
+# Support functions for A2C algorithm
+# =============================================================================
 
 @torch.no_grad()
 def unpack_a2c_batch(batch, net, params, device='cpu'):
@@ -145,8 +148,6 @@ def unpack_a2c_batch(batch, net, params, device='cpu'):
     values = net(last_states_v)[1].data.cpu().numpy()[:,-1]
     rewards[not_done] += values*params.gamma**params.steps
     return states, actions, rewards
-
-
 
 
 def calc_loss_a2c(batch, net, params, device='cpu'):
@@ -173,6 +174,10 @@ def calc_loss_a2c(batch, net, params, device='cpu'):
     
     return value_loss, policy_loss, entropy_loss
 
+
+# =============================================================================
+# Commonly used functions for all algorithms
+# =============================================================================
 
 def createEnvs(params, stack_frames=4, episodic_life=True, reward_clipping=True):
     """

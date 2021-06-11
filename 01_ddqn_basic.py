@@ -20,14 +20,10 @@ GAMES = list(data.params.keys())
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--env', default='pong', choices=GAMES,
-                        help='OpenAI gym environment name.\n Default: pong')
-    parser.add_argument('--cuda', action='store_true',
-                        help='Activate GPU in training')
-    args = parser.parse_args()
-
+    message = "Basic Duel DQN"
+    args = utils.argpars_dqn(message)
     params = data.params[args.env]
+    utils.update_params(params, args)
 
     torch.manual_seed(params.seed)
     device = 'cuda' if (args.cuda and torch.cuda.is_available()) else 'cpu'
@@ -35,10 +31,8 @@ if __name__ == '__main__':
     env = gym.make(params.env)
     env = ptan.common.wrappers.wrap_dqn(env)
 
-
     shape = env.observation_space.shape
     actions = env.action_space.n
-
     net = model.DDQN(shape, actions).to(device)
     tgt_net = ptan.agent.TargetNet(net)
 
