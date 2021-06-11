@@ -9,8 +9,12 @@ Created on Mon May 24 11:42:29 2021
 # -*- coding: utf-8 -*-
 
 import ptan
-from collections import namedtuple
 from . import utils
+from collections import namedtuple
+from torch.multiprocessing import Queue, Value
+
+
+
 EpisodeEnd = namedtuple('EpisodeEnd', ['step', 'reward', 'epsilon'])
 
 
@@ -86,6 +90,28 @@ def data_fun_global(net, exp_queue, params, frames, episodes, device='cpu'):
         exp_queue.put(exp)
 
 
+
+def a3c_data_fun(net, exp_queue, params, frames:Value, episodes:Value, mini_batch=16, device='cpu'):
+    """Generate mini batches and dump them in mp Queue"""
+    envs = utils.createEnvs(params)
+    agent = ptan.agent.ActorCriticAgent(net, device=device, apply_softmax=True)
+    exp_source = ptan.experience.ExperienceSourceFirstLast(envs, agent,
+                                                           params.gamma, steps_count=params.steps)
+    steps = 0
+    mini_batch = []                                                       
+    for exp in exp_source:
+        steps += 1
+        new_reward = exp_source.pop_total_rewards()
+        if new_reward:
+            exp_queue.put(EpisodeEnd(steps, new_reward[0], None))
+            steps = 0
+        mini_batch.append(exp)
+        if len(mini_batch) == mini_batch:    
+            exp_queue.put(mini_batch)
+            mini_batch.clear()
+
+
+
 class MPBatchGenerator(object):
     """
     Yields batchs from experiences stored in multiprocess Queue()
@@ -144,3 +170,39 @@ class MPBatchGenerator(object):
             if len(self.buffer) < self.initial:
                 continue
             yield self.buffer.sample(self.batch_size * self.multiplier)
+
+
+
+class A3CBatchGenerator:
+    """Genrate a batch a store in Queue for multiprocessing"""
+    def __init__(self, exp_queue, mini_batch, forks):
+        """Return a back of size (mini_batch x forks)"""
+        assert isinstance(exp_queue, Queue)
+        self.exp_queue = exp_queue
+        self.batch_size = mini_batch * forks
+        self.total_rewards = []
+        self.frame = 0
+        self.episodes = 0
+
+    def __iter__(self):
+        while True:
+            batch = []
+            while not self.exp_queue.empty():
+                data = self.exp_queue.get()
+                if isinstance(data, EpisodeEnd):
+                    self.frame += data.steps
+                    self.total_rewards.append(data.reward)
+                    self.episodes += 1
+                else:
+                    batch.extend(data)
+                if len(batch) < self.batch_size:
+                    continue
+                yield batch
+                batch.clear()
+
+
+    def pop_total_rewards(self):
+        r = self.total_rewards
+        if r:
+            self.total_rewards = []
+        return r
