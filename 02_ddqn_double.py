@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+Double DQN.
+
 @author:Ayman Jabri
 """
 import sys
-import os
+
 import ptan
 import argparse
 import gym
-from datetime import datetime
+
 import torch
 import torch.nn.functional as F
 
@@ -22,9 +24,10 @@ GAMES = list(data.params.keys())
 
 def calc_double_dqn_loss(batch, net, tgt_net, gamma, device='cpu'):
     """
-    Loss function implementation of DeepMind paper titled
-    Deep Reinforcement Learning with Double Q-Learning
-    ([3] van Hasselt, Guez, and Silver, 2015)
+    Loss function implementation of DeepMind paper.
+    
+    [Deep Reinforcement Learning with Double Q-Learning
+    ([3] van Hasselt, Guez, and Silver, 2015)]
     """
     states, actions, rewards, dones, last_states = utils.unpack_batch(batch)
 

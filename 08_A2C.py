@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Attempting to solve Atari games using A2C
+Attempting to solve Atari games using A2C.
 
 @author: Ayman Jabri
 """

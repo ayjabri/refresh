@@ -11,8 +11,6 @@ Created on Mon May 24 11:42:29 2021
 import ptan
 from . import utils
 from collections import namedtuple
-from torch.multiprocessing import Queue, Value
-
 
 
 EpisodeEnd = namedtuple('EpisodeEnd', ['step', 'reward', 'epsilon'])
@@ -20,7 +18,7 @@ EpisodeEnd = namedtuple('EpisodeEnd', ['step', 'reward', 'epsilon'])
 
 def data_fun(net, exp_queue, params, device='cpu'):
     """
-    Definition: data_fun(net,exp_queue,ENV_ID,STEPS=1,N_ENVS=1)
+    Definition: data_fun(net,exp_queue,ENV_ID,STEPS=1,N_ENVS=1).
 
     Stores ptan FirstLast experiences in a multiprocess Queue()
 
@@ -90,15 +88,14 @@ def data_fun_global(net, exp_queue, params, frames, episodes, device='cpu'):
         exp_queue.put(exp)
 
 
-
-def a3c_data_fun(net, exp_queue, params, frames:Value, episodes:Value, mini_batch=16, device='cpu'):
-    """Generate mini batches and dump them in mp Queue"""
-    envs = utils.createEnvs(params)
+def a3c_data_fun(net, exp_queue, params, mini_batch_size=16, device='cpu'):
+    """Generate mini batches and dump them in mp Queue."""
+    envs = utils.createEnvs(params, stack_frames=params.frame_stack)
     agent = ptan.agent.ActorCriticAgent(net, device=device, apply_softmax=True)
     exp_source = ptan.experience.ExperienceSourceFirstLast(envs, agent,
                                                            params.gamma, steps_count=params.steps)
     steps = 0
-    mini_batch = []                                                       
+    mini_batch = []
     for exp in exp_source:
         steps += 1
         new_reward = exp_source.pop_total_rewards()
@@ -106,19 +103,17 @@ def a3c_data_fun(net, exp_queue, params, frames:Value, episodes:Value, mini_batc
             exp_queue.put(EpisodeEnd(steps, new_reward[0], None))
             steps = 0
         mini_batch.append(exp)
-        if len(mini_batch) == mini_batch:    
-            exp_queue.put(mini_batch)
+        if len(mini_batch) >= mini_batch_size:
+            exp_queue.put(list(mini_batch))
             mini_batch.clear()
-
 
 
 class MPBatchGenerator(object):
     """
-    Yields batchs from experiences stored in multiprocess Queue()
+    Yield batchs from experiences stored in multiprocess Queue().
 
-
-    Parameters:
-    -------
+    Parameters
+    ----------
     buffer: ptan.experience.ExperienceReplayBuffer(exp_source=None)
         Buffer object that will store FirstLast experiences
 
@@ -172,12 +167,11 @@ class MPBatchGenerator(object):
             yield self.buffer.sample(self.batch_size * self.multiplier)
 
 
-
 class A3CBatchGenerator:
-    """Genrate a batch a store in Queue for multiprocessing"""
+    """An itterator that yields a batch from experiences stored in Queue for multiprocessing."""
+
     def __init__(self, exp_queue, mini_batch, forks):
-        """Return a back of size (mini_batch x forks)"""
-        assert isinstance(exp_queue, Queue)
+        """Return a back of size (mini_batch x forks)."""
         self.exp_queue = exp_queue
         self.batch_size = mini_batch * forks
         self.total_rewards = []
@@ -187,19 +181,16 @@ class A3CBatchGenerator:
     def __iter__(self):
         while True:
             batch = []
-            while not self.exp_queue.empty():
-                data = self.exp_queue.get()
-                if isinstance(data, EpisodeEnd):
-                    self.frame += data.steps
-                    self.total_rewards.append(data.reward)
-                    self.episodes += 1
-                else:
-                    batch.extend(data)
-                if len(batch) < self.batch_size:
-                    continue
-                yield batch
+            data = self.exp_queue.get()
+            if isinstance(data, EpisodeEnd):
+                self.frame += data.step
+                self.total_rewards.append(data.reward)
+                self.episodes += 1
+            else:
+                batch.extend(data)
+            if len(batch) >= self.batch_size:
+                yield list(batch)
                 batch.clear()
-
 
     def pop_total_rewards(self):
         r = self.total_rewards

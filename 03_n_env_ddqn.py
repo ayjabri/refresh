@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Wed May 28 05:45:57 2021
+Created on Wed May 28 05:45:57 2021.
 
 @author: Ayman Jabri
 email: ayman.aljabri@gmail.com
 """
-import os
 import ptan
 import torch
 import argparse
 from tensorboardX import SummaryWriter
 from lib import utils, model, data
-from datetime import datetime
+
 
 ALGORITHM = 'ENVS_DDQN'
 GAMES = list(data.params.keys())

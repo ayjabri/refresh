@@ -17,11 +17,11 @@ import numpy as np
 from datetime import datetime
 from . import atari_wrappers
 
-# =============================================================================
+# ====================================================================================
 # Classes:
-#   1- Mean Rewards Monitor: tracks mean rewards and saves when a higher mean rewards is achived
+#   1- Mean Rewards Monitor: tracks mean rewards and saves when a new high is achieved
 #
-# =============================================================================
+# ====================================================================================
 
 class MeanRewardsMonitor:
     """Track mean rewards, save model each new reward"""
@@ -179,7 +179,7 @@ def calc_loss_a2c(batch, net, params, device='cpu'):
 # Commonly used functions for all algorithms
 # =============================================================================
 
-def createEnvs(params, stack_frames=4, episodic_life=True, reward_clipping=True):
+def createEnvs(params, stack_frames=4, episodic_life=True, reward_clipping=True, skip=4):
     """
     Return n numberof OpenAI gym environments wrapped and seed set.
     params: dictionary of the environment's hyperparameters
@@ -192,9 +192,11 @@ def createEnvs(params, stack_frames=4, episodic_life=True, reward_clipping=True)
     for _ in range(params.n_envs):
         env = gym.make(params.env)
         env = ptan.common.wrappers.wrap_dqn(
-            env, stack_frames, episodic_life, reward_clipping)
+            env, stack_frames, episodic_life, reward_clipping, skip)
         if params.max_steps is not None:
-            env = atari_wrappers.TimeLimit(env, params.max_steps)
+            env._max_episode_steps= params.max_steps
+        if params.episodc_reward:
+            env = atari_wrappers.EpisodicRewardEnv(env)
         if params.seed:
             env.seed(params.seed)
         envs.append(env)
